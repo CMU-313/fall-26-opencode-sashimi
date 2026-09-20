@@ -135,6 +135,7 @@ const sessionBindingCommands = [
   "session.message.next",
   "session.message.previous",
   "messages.copy",
+  "session.bookmark.toggle",
   "session.copy",
   "session.export",
   "session.child.first",
@@ -911,6 +912,44 @@ export function Session() {
           .write?.(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
+      title: "Bookmark last assistant response",
+      value: "session.bookmark.toggle",
+      category: "Session",
+      run: () => {
+        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        const text = textParts
+          .filter((part) => !part.synthetic)
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        if (!text) {
+          toast.show({ message: "No text content found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const result = local.bookmark.toggle({
+          id: lastAssistantMessage.id,
+          sessionID: route.sessionID,
+          sessionTitle: session()?.title ?? "Untitled session",
+          text,
+        })
+        toast.show({
+          message: result === "added" ? "Response bookmarked" : "Bookmark removed",
+          variant: "success",
+        })
         dialog.clear()
       },
     },

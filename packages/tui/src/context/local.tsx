@@ -24,6 +24,26 @@ export type LocalTheme = {
   info: RGBA
 }
 
+export type LocalBookmark = {
+  id: string
+  sessionID: string
+  sessionTitle: string
+  text: string
+  createdAt: number
+}
+
+function isLocalBookmark(value: unknown): value is LocalBookmark {
+  if (!value || typeof value !== "object") return false
+  const item = value as Record<string, unknown>
+  return (
+    typeof item.id === "string" &&
+    typeof item.sessionID === "string" &&
+    typeof item.sessionTitle === "string" &&
+    typeof item.text === "string" &&
+    typeof item.createdAt === "number"
+  )
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -502,6 +522,74 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const session = createSession()
 
+    function createBookmark() {
+      const [bookmarkStore, setBookmarkStore] = createStore<{
+        ready: boolean
+        items: LocalBookmark[]
+      }>({
+        ready: false,
+        items: [],
+      })
+
+      const filePath = path.join(paths.state, "bookmark.json")
+      const state = {
+        pending: false,
+      }
+
+      function save() {
+        if (!bookmarkStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        void writeJsonAtomic(filePath, {
+          items: bookmarkStore.items,
+        })
+      }
+
+      readJson<unknown>(filePath)
+        .then((x) => {
+          if (!x || typeof x !== "object") return
+          const items = (x as Record<string, unknown>).items
+          if (Array.isArray(items)) setBookmarkStore("items", items.filter(isLocalBookmark))
+        })
+        .catch(() => {})
+        .finally(() => {
+          setBookmarkStore("ready", true)
+          if (state.pending) save()
+        })
+
+      return {
+        list() {
+          return bookmarkStore.items.toSorted((a, b) => b.createdAt - a.createdAt)
+        },
+        remove(id: string) {
+          batch(() => {
+            setBookmarkStore(
+              "items",
+              bookmarkStore.items.filter((item) => item.id !== id),
+            )
+            save()
+          })
+        },
+        toggle(entry: Omit<LocalBookmark, "createdAt">) {
+          const exists = bookmarkStore.items.some((item) => item.id === entry.id)
+          batch(() => {
+            setBookmarkStore(
+              "items",
+              exists
+                ? bookmarkStore.items.filter((item) => item.id !== entry.id)
+                : [...bookmarkStore.items, { ...entry, createdAt: Date.now() }],
+            )
+            save()
+          })
+          return exists ? ("removed" as const) : ("added" as const)
+        },
+      }
+    }
+
+    const bookmark = createBookmark()
+
     const mcp = {
       isEnabled(name: string) {
         const status = sync.data.mcp[name]
@@ -535,6 +623,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       agent,
       mcp,
       session,
+      bookmark,
       permission,
     }
     return result
