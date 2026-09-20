@@ -44,6 +44,18 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
   )
 }
 
+export function removeBookmark(items: LocalBookmark[], id: string) {
+  return items.filter((item) => item.id !== id)
+}
+
+export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
+  const exists = items.some((item) => item.id === entry.id)
+  return {
+    items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
+    result: exists ? ("removed" as const) : ("added" as const),
+  }
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -563,27 +575,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         list() {
           return bookmarkStore.items.toSorted((a, b) => b.createdAt - a.createdAt)
         },
+        has(id: string) {
+          return bookmarkStore.items.some((item) => item.id === id)
+        },
         remove(id: string) {
           batch(() => {
-            setBookmarkStore(
-              "items",
-              bookmarkStore.items.filter((item) => item.id !== id),
-            )
+            setBookmarkStore("items", removeBookmark(bookmarkStore.items, id))
             save()
           })
         },
         toggle(entry: Omit<LocalBookmark, "createdAt">) {
-          const exists = bookmarkStore.items.some((item) => item.id === entry.id)
+          const { items, result } = toggleBookmark(bookmarkStore.items, entry)
           batch(() => {
-            setBookmarkStore(
-              "items",
-              exists
-                ? bookmarkStore.items.filter((item) => item.id !== entry.id)
-                : [...bookmarkStore.items, { ...entry, createdAt: Date.now() }],
-            )
+            setBookmarkStore("items", items)
             save()
           })
-          return exists ? ("removed" as const) : ("added" as const)
+          return result
         },
       }
     }

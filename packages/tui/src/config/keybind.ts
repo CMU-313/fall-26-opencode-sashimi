@@ -145,7 +145,7 @@ export const Definitions = {
   messages_last_user: keybind("none", "Navigate to last user message"),
   messages_copy: keybind("<leader>y", "Copy message"),
   session_bookmark_toggle: keybind("<leader>w", "Bookmark or remove bookmark for the last assistant response"),
-  session_bookmark_list: keybind("<leader>v", "View saved/bookmarked responses"),
+  session_bookmark_list: keybind("<leader>v", "View bookmarked responses"),
   session_bookmark_remove: keybind("ctrl+d", "Remove bookmark"),
   messages_undo: keybind("<leader>u", "Undo message"),
   messages_redo: keybind("<leader>r", "Redo message"),

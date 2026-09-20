@@ -287,6 +287,7 @@ export function Session() {
 
   createEffect(() => {
     const sessionID = route.sessionID
+    const messageID = route.messageID
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
@@ -313,7 +314,12 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      if (route.sessionID !== sessionID || !scroll) return
+      if (messageID) {
+        scrollToMessageID(messageID)
+        return
+      }
+      scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
@@ -427,6 +433,47 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
+  }
+
+  // Positions `messageID` in view and returns whether it was found. Content can
+  // still be streaming in right after a session is opened (message list still
+  // growing), which can re-trigger the scrollbox's sticky-to-bottom behavior a
+  // moment after we've positioned; the caller re-applies this over a short
+  // settling window so the position self-corrects if that happens.
+  function applyScrollToMessage(messageID: string): boolean {
+    if (!scroll || scroll.isDestroyed) return false
+    if (route.messageID !== messageID) return false
+    const found = scroll.content.findDescendantById(messageID)
+    if (!found) return false
+    const viewportTop = scroll.viewport.y
+    const viewportBottom = viewportTop + scroll.viewport.height
+    const childTop = found.y
+    const childBottom = found.y + found.height
+    let delta = 0
+    if (childTop < viewportTop) delta = childTop - viewportTop
+    else if (childBottom > viewportBottom) delta = childBottom - viewportBottom
+    const wasSticky = scroll.stickyScroll
+    scroll.stickyScroll = false
+    scroll.scrollTop = scroll.scrollTop + delta
+    scroll.stickyScroll = wasSticky
+    return true
+  }
+
+  function scrollToMessageID(messageID: string, attempt = 0) {
+    if (!scroll || scroll.isDestroyed) return
+    if (route.messageID !== messageID) return
+    const applied = applyScrollToMessage(messageID)
+    if (!applied) {
+      if (attempt < 10) {
+        setTimeout(() => scrollToMessageID(messageID, attempt + 1), 50)
+        return
+      }
+      if (scroll && !scroll.isDestroyed) scroll.scrollTop = scroll.scrollHeight
+      return
+    }
+    for (const delay of [50, 150, 300, 600, 1000]) {
+      setTimeout(() => applyScrollToMessage(messageID), delay)
+    }
   }
 
   const local = useLocal()
@@ -916,7 +963,9 @@ export function Session() {
       },
     },
     {
-      title: "Bookmark last assistant response",
+      title: local.bookmark.has(messagesBeforeRevert().findLast((message) => message.role === "assistant")?.id ?? "")
+        ? "Remove bookmark"
+        : "Bookmark last assistant response",
       value: "session.bookmark.toggle",
       category: "Session",
       run: () => {
@@ -1531,6 +1580,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
+      <box id={props.message.id} height={0} />
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])

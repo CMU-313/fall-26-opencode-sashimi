@@ -25,7 +25,7 @@ export function DialogBookmarkList() {
 
   return (
     <DialogSelect
-      title="Saved Responses"
+      title="Bookmarked Responses"
       options={options()}
       emptyView={<text>No bookmarked responses yet</text>}
       onSelect={(option) => {
@@ -34,6 +34,7 @@ export function DialogBookmarkList() {
         route.navigate({
           type: "session",
           sessionID: bookmark.sessionID,
+          messageID: bookmark.id,
         })
         dialog.clear()
       }}

@@ -582,7 +582,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "session.bookmark.list",
-        title: "View saved responses",
+        title: "View bookmarked responses",
         category: "Session",
         slashName: "bookmarks",
         run: () => {
