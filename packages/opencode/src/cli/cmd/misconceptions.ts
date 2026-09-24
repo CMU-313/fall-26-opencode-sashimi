@@ -142,12 +142,16 @@ export const MisconceptionsCommand = effectCmd({
       { concurrency: CONCURRENCY },
     )
 
+    const skipped = results.filter((result) => result.error !== undefined)
+    // Every file failing usually means a bad model or credentials, not "no misconceptions".
+    if (skipped.length === results.length)
+      return yield* fail(`Could not analyze any transcript: ${skipped[0].error.split(EOL)[0]}`)
+
     const allFindings = results.flatMap((result) =>
       result.findings.map((item) => ({ ...item, transcript: result.file })),
     )
     const categories = allFindings.length ? yield* merge(llm, allFindings, topics) : []
     const rows = rank({ findings: allFindings, categories, topics })
-    const skipped = results.filter((result) => result.error !== undefined)
     const raw = results.filter((result) => result.raw).map((result) => result.file)
 
     if (args.json) {
