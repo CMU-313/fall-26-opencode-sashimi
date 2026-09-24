@@ -9,6 +9,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
+import { rename } from "fs/promises"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
@@ -30,6 +31,7 @@ export type LocalBookmark = {
   sessionTitle: string
   text: string
   createdAt: number
+  name?: string
 }
 
 function isLocalBookmark(value: unknown): value is LocalBookmark {
@@ -40,7 +42,8 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
     typeof item.sessionID === "string" &&
     typeof item.sessionTitle === "string" &&
     typeof item.text === "string" &&
-    typeof item.createdAt === "number"
+    typeof item.createdAt === "number" &&
+    (item.name === undefined || typeof item.name === "string")
   )
 }
 
@@ -54,6 +57,11 @@ export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark
     items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
     result: exists ? ("removed" as const) : ("added" as const),
   }
+}
+
+export function renameBookmark(items: LocalBookmark[], id: string, name: string) {
+  const trimmed = name.trim()
+  return items.map((item) => (item.id === id ? { ...item, name: trimmed || undefined } : item))
 }
 
 export function parseModel(model: string) {
@@ -548,13 +556,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pending: false,
       }
 
-      function save() {
+      // Awaited by callers so a failed write (e.g. disk full) surfaces as a
+      // thrown error instead of silently reporting success.
+      async function save() {
         if (!bookmarkStore.ready) {
           state.pending = true
           return
         }
         state.pending = false
-        void writeJsonAtomic(filePath, {
+        await writeJsonAtomic(filePath, {
           items: bookmarkStore.items,
         })
       }
@@ -565,11 +575,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const items = (x as Record<string, unknown>).items
           if (Array.isArray(items)) setBookmarkStore("items", items.filter(isLocalBookmark))
         })
-        .catch(() => {})
+        .catch(async (error) => {
+          // A missing file just means there are no bookmarks yet. Anything
+          // else means the file exists but couldn't be parsed - back it up
+          // rather than silently treating it as empty and overwriting it on
+          // the next save.
+          if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return
+          await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
+        })
         .finally(() => {
           setBookmarkStore("ready", true)
-          if (state.pending) save()
+          if (state.pending) void save().catch(() => {})
         })
+
+      function prune(sessionID: string) {
+        const remaining = bookmarkStore.items.filter((item) => item.sessionID !== sessionID)
+        if (remaining.length === bookmarkStore.items.length) return
+        setBookmarkStore("items", remaining)
+        void save().catch(() => {})
+      }
+
+      event.on("session.deleted", (evt) => {
+        prune(evt.properties.info.id)
+      })
 
       return {
         list() {
@@ -578,19 +606,37 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         has(id: string) {
           return bookmarkStore.items.some((item) => item.id === id)
         },
-        remove(id: string) {
-          batch(() => {
-            setBookmarkStore("items", removeBookmark(bookmarkStore.items, id))
-            save()
-          })
+        async remove(id: string) {
+          const previous = bookmarkStore.items
+          setBookmarkStore("items", removeBookmark(bookmarkStore.items, id))
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
         },
-        toggle(entry: Omit<LocalBookmark, "createdAt">) {
+        async toggle(entry: Omit<LocalBookmark, "createdAt">) {
+          const previous = bookmarkStore.items
           const { items, result } = toggleBookmark(bookmarkStore.items, entry)
-          batch(() => {
-            setBookmarkStore("items", items)
-            save()
-          })
+          setBookmarkStore("items", items)
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
           return result
+        },
+        async rename(id: string, name: string) {
+          const previous = bookmarkStore.items
+          setBookmarkStore("items", renameBookmark(bookmarkStore.items, id, name))
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
         },
       }
     }

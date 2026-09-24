@@ -968,10 +968,18 @@ export function Session() {
         : "Bookmark last assistant response",
       value: "session.bookmark.toggle",
       category: "Session",
-      run: () => {
+      run: async () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        // A still-streaming message's text is incomplete; bookmarking it now
+        // would freeze the saved copy at whatever text has arrived so far.
+        if (!lastAssistantMessage.time.completed) {
+          toast.show({ message: "Wait for the response to finish before bookmarking it", variant: "error" })
           dialog.clear()
           return
         }
@@ -989,16 +997,20 @@ export function Session() {
           return
         }
 
-        const result = local.bookmark.toggle({
-          id: lastAssistantMessage.id,
-          sessionID: route.sessionID,
-          sessionTitle: session()?.title ?? "Untitled session",
-          text,
-        })
-        toast.show({
-          message: result === "added" ? "Response bookmarked" : "Bookmark removed",
-          variant: "success",
-        })
+        try {
+          const result = await local.bookmark.toggle({
+            id: lastAssistantMessage.id,
+            sessionID: route.sessionID,
+            sessionTitle: session()?.title ?? "Untitled session",
+            text,
+          })
+          toast.show({
+            message: result === "added" ? "Response bookmarked" : "Bookmark removed",
+            variant: "success",
+          })
+        } catch (error) {
+          toast.show({ message: `Failed to save bookmark: ${errorMessage(error)}`, variant: "error" })
+        }
         dialog.clear()
       },
     },
