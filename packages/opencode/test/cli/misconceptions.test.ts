@@ -3,10 +3,12 @@ import { Token } from "@opencode-ai/core/util/token"
 import {
   dedupe,
   rank,
+  render,
   shrink,
   split,
   table,
   type Finding,
+  type Piece,
   type Turn,
 } from "../../src/cli/cmd/misconceptions"
 
@@ -27,6 +29,11 @@ function turns(count: number, tokens: number): Turn[] {
     text: `${i}`.padEnd(tokens * 4, "x"),
   }))
 }
+
+function turn(role: Turn["role"], text: string): Turn {
+  return { role, text }
+}
+
 
 function finding(description: string, depth: Finding["depth"], transcript = "a.json") {
   return { description, evidence: `quote: ${description} (${depth})`, depth, transcript }
@@ -110,50 +117,63 @@ describe("shrink", () => {
 describe("split", () => {
   test("keeps a short transcript in one piece", () => {
     const input = turns(4, 10)
-    expect(split(input, 1_000)).toEqual([input])
+    expect(split(input, 1_000)).toEqual([{ context: [], turns: input }])
   })
 
   test("returns no pieces for no turns", () => {
     expect(split([], 1_000)).toEqual([])
   })
 
-  test("keeps every piece within budget and only cuts between turns", () => {
-    const input = turns(20, 100)
-    const pieces = split(input, 450)
+  test("keeps every rendered piece within budget", () => {
+    const pieces = split(turns(20, 100), 450)
     expect(pieces.length).toBeGreaterThan(1)
-    pieces.forEach((piece) => {
-      expect(piece.reduce((sum, turn) => sum + Token.estimate(turn.text), 0)).toBeLessThanOrEqual(450)
-      piece.forEach((turn) => expect(input).toContainEqual(turn))
-    })
+    pieces.forEach((piece) => expect(Token.estimate(render(piece))).toBeLessThanOrEqual(450))
   })
 
-  test("covers every turn in order", () => {
+  test("counts labels and separators against the budget", () => {
+    // Many short turns are mostly labels once rendered.
+    split(turns(200, 1), 100).forEach((piece) => expect(Token.estimate(render(piece))).toBeLessThanOrEqual(100))
+  })
+
+  test("reviews every turn exactly once, in order", () => {
     const input = turns(20, 100)
-    const seen = [...new Set(split(input, 450).flat().map((turn) => turn.text))]
-    expect(seen).toEqual(input.map((turn) => turn.text))
+    expect(split(input, 450).flatMap((piece) => piece.turns)).toEqual(input)
   })
 
-  test("starts each piece with the last two turns of the previous one", () => {
+  test("starts each piece with the last two turns of the previous one as context", () => {
     const pieces = split(turns(20, 100), 450)
     pieces.slice(1).forEach((piece, i) => {
-      expect(piece.slice(0, 2)).toEqual(pieces[i].slice(-2))
+      expect(piece.context).toEqual([...pieces[i].context, ...pieces[i].turns].slice(-2))
     })
   })
 
-  test("skips the overlap when it would not fit alongside the next turn", () => {
-    const input: Turn[] = [
-      { role: "user", text: "a".repeat(400) },
-      { role: "assistant", text: "b".repeat(400) },
-      { role: "user", text: "c".repeat(1_600) },
-    ]
-    expect(split(input, 400)).toEqual([[input[0], input[1]], [input[2]]])
+  test("drops the context when it would not fit alongside the next turn", () => {
+    const input = [turn("user", "a".repeat(400)), turn("assistant", "b".repeat(400)), turn("user", "c".repeat(1_700))]
+    const pieces = split(input, 500)
+    expect(pieces.at(-1)?.context).toEqual([])
   })
 
-  test("trims a single turn larger than the budget", () => {
-    const pieces = split([{ role: "user", text: "x".repeat(10_000) }], 500)
+  test("trims a single turn larger than the budget, leaving room for its label", () => {
+    const pieces = split([turn("user", "x".repeat(10_000))], 500)
     expect(pieces).toHaveLength(1)
-    expect(Token.estimate(pieces[0][0].text)).toBeLessThanOrEqual(500)
-    expect(pieces[0][0].text.endsWith("[trimmed]")).toBe(true)
+    expect(Token.estimate(render(pieces[0]))).toBeLessThanOrEqual(500)
+    expect(pieces[0].turns[0].text.endsWith("[trimmed]")).toBe(true)
+  })
+})
+
+describe("render", () => {
+  test("puts context turns under their own heading", () => {
+    const piece: Piece = {
+      context: [turn("user", "old question")],
+      turns: [turn("assistant", "an answer"), turn("user", "new question")],
+    }
+    expect(render(piece)).toBe(
+      "Earlier messages, for context only:\n\nSTUDENT: old question\n\nMessages to review:\n\nASSISTANT: an answer\n\nSTUDENT: new question",
+    )
+  })
+
+  test("omits the context heading when there is no context", () => {
+    expect(render({ context: [], turns: [turn("user", "hi")] })).toBe("STUDENT: hi")
   })
 })
 

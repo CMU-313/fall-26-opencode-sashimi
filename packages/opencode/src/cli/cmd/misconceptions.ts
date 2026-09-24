@@ -16,6 +16,8 @@ const ASSISTANT_TOKENS = 300
 // Consecutive pieces of a long transcript share their last turns, so a question and its
 // follow-up are never split apart.
 const OVERLAP_TURNS = 2
+// Room for the labels in front of a turn cut to fit in one piece.
+const LABEL_TOKENS = 25
 // Upper bound per extraction call; very long inputs lose detail even when the model accepts them.
 const PIECE_TOKENS = 60_000
 // Room left for the system prompt and instructions around each piece.
@@ -82,6 +84,7 @@ For each one give:
 - description: one sentence stating what the student misunderstood, in general terms that would apply to other students with the same confusion.
 - evidence: a short direct quote from the student that shows it.
 - depth: how confused the student was here. mild = brief slip or quickly corrected; moderate = needed explanation; severe = stuck across several turns or built work on the wrong idea.
+Messages listed as earlier context were already reviewed; only report misconceptions shown in the messages to review.
 Do not group, rank, or merge items. Return an empty list if there are none.`
 
 const OUTLINE_PROMPT = `You read course material for a software engineering course and produce an outline of its topics.
@@ -167,6 +170,7 @@ export const MisconceptionsCommand = effectCmd({
 })
 
 export type Turn = { role: "user" | "assistant"; text: string }
+export type Piece = { context: Turn[]; turns: Turn[] }
 
 /** Reduce an `opencode export` file to the text of each turn, or undefined if it is not a valid export. */
 export function shrink(json: string) {
@@ -183,20 +187,31 @@ export function shrink(json: string) {
   })
 }
 
-/** Split turns into pieces of at most `budget` tokens, cutting only between turns and overlapping consecutive pieces. */
-export function split(turns: Turn[], budget: number) {
+/**
+ * Split turns into pieces whose rendered text fits in `budget` tokens. Pieces cut between turns and begin with the
+ * previous piece's last turns as context. A turn too long for one piece is trimmed to fit.
+ */
+export function split(turns: readonly Turn[], budget: number) {
   return turns
-    .map((turn) => ({ ...turn, text: trim(turn.text, budget) }))
-    .reduce<Turn[][]>((pieces, turn) => {
+    .map((turn) => ({ ...turn, text: trim(turn.text, budget - LABEL_TOKENS) }))
+    .reduce<Piece[]>((pieces, turn) => {
       const current = pieces.at(-1)
-      if (current && size([...current, turn]) <= budget) {
-        current.push(turn)
+      if (current && size({ context: current.context, turns: [...current.turns, turn] }) <= budget) {
+        current.turns.push(turn)
         return pieces
       }
-      const overlap = current?.slice(-OVERLAP_TURNS) ?? []
-      pieces.push(size([...overlap, turn]) <= budget ? [...overlap, turn] : [turn])
+      const context = current ? [...current.context, ...current.turns].slice(-OVERLAP_TURNS) : []
+      pieces.push(size({ context, turns: [turn] }) <= budget ? { context, turns: [turn] } : { context: [], turns: [turn] })
       return pieces
     }, [])
+}
+
+/** Render a piece for the model, with context turns under their own heading. */
+export function render(piece: Piece) {
+  const review = label(piece.turns)
+  if (piece.context.length === 0) return review
+  const context = label(piece.context)
+  return `Earlier messages, for context only:\n\n${context}\n\nMessages to review:\n\n${review}`
 }
 
 /** Drop repeated findings within one transcript, such as those seen twice in overlapping pieces, keeping the deepest. */
@@ -290,12 +305,13 @@ function trim(text: string, tokens: number) {
   return text.slice(0, tokens * 4 - TRIM_MARKER.length) + TRIM_MARKER
 }
 
-function size(turns: readonly Turn[]) {
-  return turns.reduce((sum, turn) => sum + Token.estimate(turn.text), 0)
+function label(turns: readonly Turn[]) {
+  return turns.map((turn) => `${turn.role === "user" ? "STUDENT" : "ASSISTANT"}: ${turn.text}`).join("\n\n")
 }
 
-function render(turns: readonly Turn[]) {
-  return turns.map((turn) => `${turn.role === "user" ? "STUDENT" : "ASSISTANT"}: ${turn.text}`).join("\n\n")
+// Measured on the rendered text, so labels and separators count against the budget too.
+function size(piece: Piece) {
+  return Token.estimate(render(piece))
 }
 
 type Llm = Effect.Success<ReturnType<typeof connect>>
