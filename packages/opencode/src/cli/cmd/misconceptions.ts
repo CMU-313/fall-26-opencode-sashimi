@@ -189,11 +189,11 @@ export function shrink(json: string) {
 
 /**
  * Split turns into pieces whose rendered text fits in `budget` tokens. Pieces cut between turns and begin with the
- * previous piece's last turns as context. A turn too long for one piece is trimmed to fit.
+ * previous piece's last turns as context. A turn too long for one piece becomes overlapping parts.
  */
 export function split(turns: readonly Turn[], budget: number) {
   return turns
-    .map((turn) => ({ ...turn, text: trim(turn.text, budget - LABEL_TOKENS) }))
+    .flatMap((turn) => parts(turn, budget))
     .reduce<Piece[]>((pieces, turn) => {
       const current = pieces.at(-1)
       if (current && size({ context: current.context, turns: [...current.turns, turn] }) <= budget) {
@@ -314,6 +314,21 @@ function size(piece: Piece) {
   return Token.estimate(render(piece))
 }
 
+// A turn too long for one piece is cut into overlapping parts instead of truncated, so nothing the student wrote is lost.
+function parts(turn: Turn, budget: number) {
+  if (size({ context: [], turns: [turn] }) <= budget) return [turn]
+  const chars = (budget - LABEL_TOKENS) * 4
+  const texts = windows(turn.text, chars, Math.floor(chars / 10))
+  return texts.map((text, i) => ({ ...turn, text: `(part ${i + 1} of ${texts.length}) ${text}` }))
+}
+
+// Fixed-size slices of `text` where each slice repeats the last `overlap` characters of the previous one.
+function windows(text: string, size: number, overlap: number) {
+  const step = size - overlap
+  const count = text.length <= size ? 1 : Math.ceil((text.length - size) / step) + 1
+  return Array.from({ length: count }, (_, i) => text.slice(i * step, i * step + size))
+}
+
 type Llm = Effect.Success<ReturnType<typeof connect>>
 
 const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string | undefined) {
@@ -377,15 +392,7 @@ const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (
   const text = yield* Effect.promise(() => Bun.file(file).text())
   const turns = shrink(text)
   if (!turns && !raw) return yield* Effect.fail(new Error("not a valid `opencode export` file"))
-  // Raw files have no turn boundaries, so they are cut into fixed-size chunks (Token.estimate counts four characters per token).
-  const chunk = llm.budget * 4
-  const pieces = turns
-    ? split(turns, llm.budget).map(render)
-    : Array.from(
-        { length: Math.ceil(text.trim().length / chunk) },
-        (_, i) =>
-          `The transcript below is a raw file in an unrecognized format. Work out which lines the student wrote.\n\n${text.trim().slice(i * chunk, (i + 1) * chunk)}`,
-      )
+  const pieces = turns ? split(turns, llm.budget).map(render) : rawChunks(text, llm.budget)
   const cached = path.join(
     cache,
     "findings",
@@ -400,6 +407,18 @@ const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (
   yield* Effect.promise(() => Bun.write(cached, JSON.stringify({ misconceptions }, null, 2)))
   return { misconceptions, raw: !turns }
 })
+
+// Raw files have no turn boundaries, so they are cut into overlapping fixed-size chunks
+// (Token.estimate counts four characters per token), leaving room for the note in front.
+function rawChunks(text: string, budget: number) {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  const chars = (budget - 50) * 4
+  return windows(trimmed, chars, Math.floor(chars / 10)).map(
+    (chunk) =>
+      `The transcript below is a raw file in an unrecognized format. Work out which lines the student wrote.\n\n${chunk}`,
+  )
+}
 
 const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, course: string, cache: string) {
   // Saved outlines are reused as-is so a TA can correct topic importance by editing the file.

@@ -34,6 +34,9 @@ function turn(role: Turn["role"], text: string): Turn {
   return { role, text }
 }
 
+function withoutPartLabel(text: string) {
+  return text.replace(/^\(part \d+ of \d+\) /, "")
+}
 
 function finding(description: string, depth: Finding["depth"], transcript = "a.json") {
   return { description, evidence: `quote: ${description} (${depth})`, depth, transcript }
@@ -153,11 +156,17 @@ describe("split", () => {
     expect(pieces.at(-1)?.context).toEqual([])
   })
 
-  test("trims a single turn larger than the budget, leaving room for its label", () => {
-    const pieces = split([turn("user", "x".repeat(10_000))], 500)
-    expect(pieces).toHaveLength(1)
-    expect(Token.estimate(render(pieces[0]))).toBeLessThanOrEqual(500)
-    expect(pieces[0].turns[0].text.endsWith("[trimmed]")).toBe(true)
+  test("splits a student message too long for one piece into overlapping parts instead of cutting it off", () => {
+    const question = "so why does my test still fail?"
+    const pieces = split([turn("user", `${"x".repeat(10_000)} ${question}`)], 500)
+    const texts = pieces.flatMap((piece) => piece.turns).map((item) => item.text)
+    expect(texts.length).toBeGreaterThan(1)
+    expect(texts[0].startsWith(`(part 1 of ${texts.length}) `)).toBe(true)
+    expect(texts.at(-1)?.endsWith(question)).toBe(true)
+    texts.slice(1).forEach((text, i) => {
+      expect(withoutPartLabel(text).startsWith(withoutPartLabel(texts[i]).slice(-100))).toBe(true)
+    })
+    pieces.forEach((piece) => expect(Token.estimate(render(piece))).toBeLessThanOrEqual(500))
   })
 })
 
