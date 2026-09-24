@@ -24,7 +24,7 @@ const PIECE_TOKENS = 60_000
 const PROMPT_TOKENS = 2_000
 const CONCURRENCY = 4
 // Bump when the extraction prompt or schema changes so cached findings are recomputed.
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const TRIM_MARKER = " …[trimmed]"
 
 export const DEPTH_WEIGHT = { mild: 1, moderate: 2, severe: 3 }
@@ -33,10 +33,24 @@ export const IMPORTANCE_WEIGHT = { core: 3, supporting: 2, peripheral: 1, uncove
 const Depth = Schema.Literals(["mild", "moderate", "severe"])
 const Importance = Schema.Literals(["core", "supporting", "peripheral"])
 
+// What the model returns: `turn` points at the numbered student message the evidence quotes.
+const Extracted = Schema.Struct({
+  description: Schema.String,
+  evidence: Schema.String,
+  depth: Depth,
+  turn: Schema.optional(Schema.Number),
+})
+export type Extracted = typeof Extracted.Type
+
+const Extraction = Schema.Struct({ misconceptions: Schema.Array(Extracted) })
+
+// `messageIndex` is the cited student message's position in the export's `messages` array, when the model
+// cited one that exists, so the full message can be looked up in the transcript file.
 const Finding = Schema.Struct({
   description: Schema.String,
   evidence: Schema.String,
   depth: Depth,
+  messageIndex: Schema.optional(Schema.Number),
 })
 export type Finding = typeof Finding.Type
 
@@ -83,6 +97,7 @@ Be inclusive: wrong beliefs, missing knowledge, and repeated struggles with the 
 For each one give:
 - description: one sentence stating what the student misunderstood, in general terms that would apply to other students with the same confusion.
 - evidence: a short direct quote from the student that shows it.
+- turn: the number in brackets before the student message the evidence quotes. Omit it if the messages are not numbered.
 - depth: how confused the student was here. mild = brief slip or quickly corrected; moderate = needed explanation; severe = stuck across several turns or built work on the wrong idea.
 Messages listed as earlier context were already reviewed; only report misconceptions shown in the messages to review.
 Do not group, rank, or merge items. Return an empty list if there are none.`
@@ -169,27 +184,28 @@ export const MisconceptionsCommand = effectCmd({
   }),
 })
 
-export type Turn = { role: "user" | "assistant"; text: string }
+// `index` is the message's position in the export's `messages` array.
+export type Turn = { role: "user" | "assistant"; text: string; index: number }
 export type Piece = { context: Turn[]; turns: Turn[] }
 
 /** Reduce an `opencode export` file to the text of each turn, or undefined if it is not a valid export. */
 export function shrink(json: string) {
   const file = decodeExport(json)
   if (Option.isNone(file)) return undefined
-  return file.value.messages.flatMap((message): Turn[] => {
+  return file.value.messages.flatMap((message, index): Turn[] => {
     const text = message.parts
       .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
       .map((part) => part.text ?? "")
       .join("\n")
       .trim()
     if (!text) return []
-    return [{ role: message.info.role, text: message.info.role === "assistant" ? trim(text, ASSISTANT_TOKENS) : text }]
+    return [{ role: message.info.role, text: message.info.role === "assistant" ? trim(text, ASSISTANT_TOKENS) : text, index }]
   })
 }
 
 /**
  * Split turns into pieces whose rendered text fits in `budget` tokens. Pieces cut between turns and begin with the
- * previous piece's last turns as context. A turn too long for one piece becomes overlapping parts.
+ * previous piece's last turns as unnumbered context. A turn too long for one piece becomes overlapping parts.
  */
 export function split(turns: readonly Turn[], budget: number) {
   return turns
@@ -206,12 +222,24 @@ export function split(turns: readonly Turn[], budget: number) {
     }, [])
 }
 
-/** Render a piece for the model, with context turns under their own heading. */
+/** Render a piece for the model: context turns unnumbered, student turns to review numbered by position. */
 export function render(piece: Piece) {
-  const review = label(piece.turns)
+  const review = piece.turns
+    .map((turn) => (turn.role === "user" ? `[${turn.index + 1}] STUDENT: ${turn.text}` : `ASSISTANT: ${turn.text}`))
+    .join("\n\n")
   if (piece.context.length === 0) return review
-  const context = label(piece.context)
+  const context = piece.context
+    .map((turn) => `${turn.role === "user" ? "STUDENT" : "ASSISTANT"}: ${turn.text}`)
+    .join("\n\n")
   return `Earlier messages, for context only:\n\n${context}\n\nMessages to review:\n\n${review}`
+}
+
+/** Record which message the evidence came from when the model cites a numbered student turn from this piece. */
+export function locate(item: Extracted, piece: Piece): Finding {
+  const finding = { description: item.description, evidence: item.evidence, depth: item.depth }
+  const turn = piece.turns.find((candidate) => candidate.role === "user" && candidate.index + 1 === item.turn)
+  if (!turn) return finding
+  return { ...finding, messageIndex: turn.index }
 }
 
 /** Drop repeated findings within one transcript, such as those seen twice in overlapping pieces, keeping the deepest. */
@@ -277,7 +305,11 @@ export function rank(input: {
         examples: deepest
           .toSorted((a, b) => DEPTH_WEIGHT[b.depth] - DEPTH_WEIGHT[a.depth])
           .slice(0, 2)
-          .map((item) => item.evidence),
+          .map((item) => ({
+            transcript: item.transcript,
+            evidence: item.evidence,
+            messageIndex: item.messageIndex,
+          })),
       }
     })
     .toSorted((a, b) => b.urgency - a.urgency || b.transcripts - a.transcripts || a.category.localeCompare(b.category))
@@ -294,7 +326,10 @@ export function table(rows: readonly Row[], transcripts: number) {
       `${i + 1}. ${row.category}  (urgency ${row.urgency})`,
       `   ${row.transcripts} transcript(s): ${row.depth.severe} severe, ${row.depth.moderate} moderate, ${row.depth.mild} mild`,
       ...(row.importance ? [`   topic: ${row.topic ?? "not covered by course material"} (${row.importance})`] : []),
-      ...row.examples.map((example) => `   > ${example}`),
+      ...row.examples.map(
+        (example) =>
+          `   > ${example.evidence}  (${example.transcript}${example.messageIndex === undefined ? "" : `, message ${example.messageIndex}`})`,
+      ),
     ]),
   ].join(EOL)
 }
@@ -303,10 +338,6 @@ function trim(text: string, tokens: number) {
   if (Token.estimate(text) <= tokens) return text
   // Token.estimate counts four characters per token.
   return text.slice(0, tokens * 4 - TRIM_MARKER.length) + TRIM_MARKER
-}
-
-function label(turns: readonly Turn[]) {
-  return turns.map((turn) => `${turn.role === "user" ? "STUDENT" : "ASSISTANT"}: ${turn.text}`).join("\n\n")
 }
 
 // Measured on the rendered text, so labels and separators count against the budget too.
@@ -392,18 +423,32 @@ const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (
   const text = yield* Effect.promise(() => Bun.file(file).text())
   const turns = shrink(text)
   if (!turns && !raw) return yield* Effect.fail(new Error("not a valid `opencode export` file"))
-  const pieces = turns ? split(turns, llm.budget).map(render) : rawChunks(text, llm.budget)
   const cached = path.join(
     cache,
     "findings",
     `${Bun.hash(JSON.stringify([CACHE_VERSION, llm.key, turns ?? text])).toString(16)}.json`,
   )
-  const hit = yield* Effect.promise(() => Bun.file(cached).text().catch(() => ""))
-  const stored = decodeFindings(hit)
+  const stored = decodeFindings(yield* Effect.promise(() => Bun.file(cached).text().catch(() => "")))
   if (Option.isSome(stored)) return { misconceptions: stored.value.misconceptions, raw: !turns }
 
-  const found = yield* Effect.forEach(pieces, (piece) => llm.ask(Findings, EXTRACT_PROMPT, piece))
-  const misconceptions = dedupe(found.flatMap((item) => item.misconceptions))
+  const found = turns
+    ? yield* Effect.forEach(split(turns, llm.budget), (piece) =>
+        llm
+          .ask(Extraction, EXTRACT_PROMPT, render(piece))
+          .pipe(Effect.map((result) => result.misconceptions.map((item) => locate(item, piece)))),
+      )
+    : yield* Effect.forEach(rawChunks(text, llm.budget), (chunk) =>
+        llm.ask(Extraction, EXTRACT_PROMPT, chunk).pipe(
+          Effect.map((result) =>
+            result.misconceptions.map((item) => ({
+              description: item.description,
+              evidence: item.evidence,
+              depth: item.depth,
+            })),
+          ),
+        ),
+      )
+  const misconceptions = dedupe(found.flat())
   yield* Effect.promise(() => Bun.write(cached, JSON.stringify({ misconceptions }, null, 2)))
   return { misconceptions, raw: !turns }
 })

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Token } from "@opencode-ai/core/util/token"
 import {
   dedupe,
+  locate,
   rank,
   render,
   shrink,
@@ -27,11 +28,12 @@ function turns(count: number, tokens: number): Turn[] {
   return Array.from({ length: count }, (_, i) => ({
     role: i % 2 === 0 ? "user" : "assistant",
     text: `${i}`.padEnd(tokens * 4, "x"),
+    index: i,
   }))
 }
 
-function turn(role: Turn["role"], text: string): Turn {
-  return { role, text }
+function turn(role: Turn["role"], text: string, index: number): Turn {
+  return { role, text, index }
 }
 
 function withoutPartLabel(text: string) {
@@ -51,8 +53,8 @@ describe("shrink", () => {
       ]),
     )
     expect(result).toEqual([
-      { role: "user", text: "why does git pull change my files?" },
-      { role: "assistant", text: "Pull runs fetch and then merge." },
+      { role: "user", text: "why does git pull change my files?", index: 0 },
+      { role: "assistant", text: "Pull runs fetch and then merge.", index: 1 },
     ])
   })
 
@@ -81,8 +83,8 @@ describe("shrink", () => {
       ]),
     )
     expect(result).toEqual([
-      { role: "user", text: "fix my test" },
-      { role: "assistant", text: "The assertion compares the wrong field." },
+      { role: "user", text: "fix my test", index: 0 },
+      { role: "assistant", text: "The assertion compares the wrong field.", index: 1 },
     ])
   })
 
@@ -94,7 +96,17 @@ describe("shrink", () => {
         { role: "assistant", parts: [{ type: "text", text: "   " }] },
       ]),
     )
-    expect(result).toEqual([{ role: "user", text: "first\nsecond" }])
+    expect(result).toEqual([{ role: "user", text: "first\nsecond", index: 0 }])
+  })
+
+  test("numbers turns by their position in the export, counting messages without text", () => {
+    const result = shrink(
+      exported([
+        { role: "assistant", parts: [{ type: "tool", tool: "read", state: { status: "completed", output: "..." } }] },
+        { role: "user", parts: [{ type: "text", text: "why?" }] },
+      ]),
+    )
+    expect(result).toEqual([{ role: "user", text: "why?", index: 1 }])
   })
 
   test("trims long assistant replies but never student text", () => {
@@ -151,14 +163,14 @@ describe("split", () => {
   })
 
   test("drops the context when it would not fit alongside the next turn", () => {
-    const input = [turn("user", "a".repeat(400)), turn("assistant", "b".repeat(400)), turn("user", "c".repeat(1_700))]
+    const input = [turn("user", "a".repeat(400), 0), turn("assistant", "b".repeat(400), 1), turn("user", "c".repeat(1_700), 2)]
     const pieces = split(input, 500)
     expect(pieces.at(-1)?.context).toEqual([])
   })
 
   test("splits a student message too long for one piece into overlapping parts instead of cutting it off", () => {
     const question = "so why does my test still fail?"
-    const pieces = split([turn("user", `${"x".repeat(10_000)} ${question}`)], 500)
+    const pieces = split([turn("user", `${"x".repeat(10_000)} ${question}`, 0)], 500)
     const texts = pieces.flatMap((piece) => piece.turns).map((item) => item.text)
     expect(texts.length).toBeGreaterThan(1)
     expect(texts[0].startsWith(`(part 1 of ${texts.length}) `)).toBe(true)
@@ -171,18 +183,35 @@ describe("split", () => {
 })
 
 describe("render", () => {
-  test("puts context turns under their own heading", () => {
+  test("numbers student turns to review by position and leaves context unnumbered", () => {
     const piece: Piece = {
-      context: [turn("user", "old question")],
-      turns: [turn("assistant", "an answer"), turn("user", "new question")],
+      context: [turn("user", "old question", 0)],
+      turns: [turn("assistant", "an answer", 1), turn("user", "new question", 2)],
     }
     expect(render(piece)).toBe(
-      "Earlier messages, for context only:\n\nSTUDENT: old question\n\nMessages to review:\n\nASSISTANT: an answer\n\nSTUDENT: new question",
+      "Earlier messages, for context only:\n\nSTUDENT: old question\n\nMessages to review:\n\nASSISTANT: an answer\n\n[3] STUDENT: new question",
     )
   })
 
   test("omits the context heading when there is no context", () => {
-    expect(render({ context: [], turns: [turn("user", "hi")] })).toBe("STUDENT: hi")
+    expect(render({ context: [], turns: [turn("user", "hi", 0)] })).toBe("[1] STUDENT: hi")
+  })
+})
+
+describe("locate", () => {
+  const item = { description: "d", evidence: "full", depth: "mild" as const }
+
+  test("records the position of the student message the model cited, even when the piece holds only a part", () => {
+    const piece: Piece = { context: [], turns: [turn("user", "(part 1 of 2) the full", 4)] }
+    expect(locate({ ...item, turn: 5 }, piece)).toEqual({ ...item, messageIndex: 4 })
+  })
+
+  test("leaves the position off when the cited turn is missing, not a student turn, or only context", () => {
+    const piece: Piece = { context: [turn("user", "old", 0)], turns: [turn("assistant", "reply", 1), turn("user", "later", 2)] }
+    expect(locate(item, piece)).toEqual(item)
+    expect(locate({ ...item, turn: 2 }, piece)).toEqual(item)
+    expect(locate({ ...item, turn: 1 }, piece)).toEqual(item)
+    expect(locate({ ...item, turn: 9 }, piece)).toEqual(item)
   })
 })
 
@@ -292,7 +321,10 @@ describe("rank", () => {
       ],
       categories: [{ name: "x", topic: "none", findingIds: [0, 1, 2] }],
     })
-    expect(rows[0].examples).toEqual(["quote: x (severe)", "quote: x (moderate)"])
+    expect(rows[0].examples.map((example) => [example.evidence, example.transcript])).toEqual([
+      ["quote: x (severe)", "b.json"],
+      ["quote: x (moderate)", "c.json"],
+    ])
   })
 
   test("breaks urgency ties by transcript count, then name", () => {
@@ -334,6 +366,15 @@ describe("table", () => {
     expect(output).toContain("1. git pull vs fetch  (urgency 3)")
     expect(output).toContain("1 transcript(s): 1 severe, 0 moderate, 0 mild")
     expect(output).toContain("topic: not covered by course material (uncovered)")
-    expect(output).toContain("> quote: pull only fetches (severe)")
+    expect(output).toContain("> quote: pull only fetches (severe)  (a.json)")
+    expect(
+      table(
+        rank({
+          findings: [{ ...finding("pull only fetches", "severe"), messageIndex: 7 }],
+          categories: [{ name: "git pull vs fetch", topic: "none", findingIds: [0] }],
+        }),
+        1,
+      ),
+    ).toContain("(a.json, message 7)")
   })
 })
