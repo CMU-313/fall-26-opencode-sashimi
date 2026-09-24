@@ -142,9 +142,11 @@ export const MisconceptionsCommand = effectCmd({
       { concurrency: CONCURRENCY },
     )
 
-    const findings = results.flatMap((result) => result.findings.map((item) => ({ ...item, transcript: result.file })))
-    const categories = findings.length ? yield* merge(llm, findings, topics) : []
-    const rows = rank({ findings, categories, topics })
+    const allFindings = results.flatMap((result) =>
+      result.findings.map((item) => ({ ...item, transcript: result.file })),
+    )
+    const categories = allFindings.length ? yield* merge(llm, allFindings, topics) : []
+    const rows = rank({ findings: allFindings, categories, topics })
     const skipped = results.filter((result) => result.error !== undefined)
     const raw = results.filter((result) => result.raw).map((result) => result.file)
 
