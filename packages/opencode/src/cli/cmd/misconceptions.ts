@@ -8,6 +8,7 @@ import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { usable } from "@/session/overflow"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { effectCmd, fail } from "../effect-cmd"
 
 // Assistant replies only give context for the student's side, so keep a short prefix of each.
@@ -313,8 +314,16 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
         temperature: 0,
         schema: Object.assign(Schema.toStandardSchemaV1(schema), Schema.toStandardJSONSchemaV1(schema)),
         messages: [
-          // Providers whose JSON mode is `json_object` (such as DeepSeek) reject prompts that never mention JSON.
-          ...(oauth ? [] : [{ role: "system" as const, content: `${system}\nRespond in JSON.` }]),
+          // Providers whose JSON mode is `json_object` (such as DeepSeek) reject prompts that never mention
+          // JSON and do not enforce the schema, so the model has to see the exact field names.
+          ...(oauth
+            ? []
+            : [
+                {
+                  role: "system" as const,
+                  content: `${system}\nRespond in JSON matching this schema: ${JSON.stringify(ToolJsonSchema.fromSchema(schema))}`,
+                },
+              ]),
           { role: "user" as const, content: prompt },
         ],
       }
