@@ -242,15 +242,17 @@ export function locate(item: Extracted, piece: Piece): Finding {
   return { ...finding, messageIndex: turn.index }
 }
 
-/** Drop repeated findings within one transcript, such as those seen twice in overlapping pieces, keeping the deepest. */
+/**
+ * Drop repeated findings within one transcript, keeping the deepest. Findings that cite a student message repeat
+ * when they cite the same one; findings without a cited message repeat when they share a description.
+ */
 export function dedupe(findings: readonly Finding[]) {
-  const unique = new Map<string, Finding>()
-  findings.forEach((item) => {
-    const key = item.description.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-    const existing = unique.get(key)
-    if (!existing || DEPTH_WEIGHT[item.depth] > DEPTH_WEIGHT[existing.depth]) unique.set(key, item)
-  })
-  return [...unique.values()]
+  return findings.reduce<Finding[]>((kept, item) => {
+    const match = kept.findIndex((other) => repeats(other, item))
+    if (match === -1) return [...kept, item]
+    if (DEPTH_WEIGHT[item.depth] <= DEPTH_WEIGHT[kept[match].depth]) return kept
+    return kept.map((other, i) => (i === match ? item : other))
+  }, [])
 }
 
 /**
@@ -358,6 +360,16 @@ function windows(text: string, size: number, overlap: number) {
   const step = size - overlap
   const count = text.length <= size ? 1 : Math.ceil((text.length - size) / step) + 1
   return Array.from({ length: count }, (_, i) => text.slice(i * step, i * step + size))
+}
+
+function normalize(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+// Compared by position rather than text, so two different messages that read the same are not merged.
+function repeats(a: Finding, b: Finding) {
+  if (a.messageIndex !== undefined || b.messageIndex !== undefined) return a.messageIndex === b.messageIndex
+  return normalize(a.description) === normalize(b.description)
 }
 
 type Llm = Effect.Success<ReturnType<typeof connect>>

@@ -225,6 +225,32 @@ describe("dedupe", () => {
     expect(result).toEqual([{ description: "thinks Git pull only fetches", evidence: "two", depth: "severe" }])
   })
 
+  test("merges findings that cite the same message, however they are described, keeping the deepest", () => {
+    const result = dedupe([
+      { description: "Thinks pull only downloads", evidence: "pull just downloads", depth: "mild", messageIndex: 1 },
+      { description: "Trusts local runs over CI", evidence: "it passes on my laptop", depth: "severe", messageIndex: 1 },
+    ])
+    expect(result).toEqual([
+      { description: "Trusts local runs over CI", evidence: "it passes on my laptop", depth: "severe", messageIndex: 1 },
+    ])
+  })
+
+  test("keeps findings with the same description when they cite different messages", () => {
+    const input: Finding[] = [
+      { description: "Thinks pull only downloads", evidence: "one", depth: "mild", messageIndex: 1 },
+      { description: "Thinks pull only downloads", evidence: "two", depth: "mild", messageIndex: 2 },
+    ]
+    expect(dedupe(input)).toEqual(input)
+  })
+
+  test("keeps matching quotes from different messages", () => {
+    const input: Finding[] = [
+      { description: "Trusts local runs over CI", evidence: "it works for me", depth: "mild", messageIndex: 1 },
+      { description: "Skips code review", evidence: "it works for me", depth: "mild", messageIndex: 2 },
+    ]
+    expect(dedupe(input)).toEqual(input)
+  })
+
   test("keeps different misconceptions", () => {
     const input = [
       { description: "Thinks git pull only fetches", evidence: "one", depth: "mild" as const },
