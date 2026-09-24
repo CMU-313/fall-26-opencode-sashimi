@@ -58,9 +58,17 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+// Segmenting by grapheme (rather than slicing by UTF-16 code unit) avoids
+// splitting a surrogate pair or a multi-codepoint emoji sequence in half.
+const graphemeSegmenter =
+  typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : undefined
+
 export function truncate(str: string, len: number): string {
   if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (!graphemeSegmenter) return str.slice(0, len - 1) + "…"
+  const graphemes = Array.from(graphemeSegmenter.segment(str), (segment) => segment.segment)
+  if (graphemes.length <= len) return str
+  return graphemes.slice(0, len - 1).join("") + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
