@@ -64,8 +64,10 @@ const layer = Layer.effectDiscard(
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
+                  input: { pattern: input.pattern, path: input.path, limit: input.limit },
                   root: input.path ?? ".",
                   path: input.path,
+                  pattern: input.pattern,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
