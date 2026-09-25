@@ -73,6 +73,12 @@ const layer = Layer.effectDiscard(
                 action: name,
                 resources: [resource],
                 save: ["*"],
+                metadata: {
+                  input: { path: input.path, offset: input.offset, limit: input.limit },
+                  path: input.path,
+                  offset: input.offset,
+                  limit: input.limit,
+                },
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
