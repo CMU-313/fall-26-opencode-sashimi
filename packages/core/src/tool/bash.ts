@@ -143,6 +143,12 @@ const layer = Layer.effectDiscard(
                 action: name,
                 resources: [input.command],
                 save: [input.command],
+                metadata: {
+                  input: { command: input.command, workdir: input.workdir, timeout: input.timeout },
+                  command: input.command,
+                  workdir: input.workdir,
+                  timeout: input.timeout,
+                },
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
