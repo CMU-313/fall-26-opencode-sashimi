@@ -8,6 +8,8 @@ import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 import { DialogBookmarkRename } from "./dialog-bookmark-rename"
 
+//This file shows the bookmarked responses, listing by 
+// date and lets users jump to a bookmark, remove it, or rename it
 export function DialogBookmarkList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -19,8 +21,11 @@ export function DialogBookmarkList() {
     return local.bookmark.list().map((bookmark) => {
       const label = new Date(bookmark.createdAt).toDateString()
       return {
+        //Names become small snippet of response if they don't have a name 
         title: bookmark.name || Locale.truncate(bookmark.text.replace(/\s+/g, " ").trim(), 80),
         value: bookmark.id,
+        //Since bookmarks are grouped by date created, those created today get assigned
+        // to today instead of the date string
         category: label === today ? "Today" : label,
         footer: bookmark.sessionTitle,
       }

@@ -25,6 +25,7 @@ export type LocalTheme = {
   info: RGBA
 }
 
+// Added a bookmark type with fields to identify it 
 export type LocalBookmark = {
   id: string
   sessionID: string
@@ -33,7 +34,8 @@ export type LocalBookmark = {
   createdAt: number
   name?: string
 }
-
+//This function checks to make sure the bookmarks from bookmark.json
+//that are read in have the proper fields, so bad entries can be filtered out
 function isLocalBookmark(value: unknown): value is LocalBookmark {
   if (!value || typeof value !== "object") return false
   const item = value as Record<string, unknown>
@@ -47,10 +49,13 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
   )
 }
 
+//Returns an array of bookmarks without the one removed
 export function removeBookmark(items: LocalBookmark[], id: string) {
   return items.filter((item) => item.id !== id)
 }
-
+//If a bookmark with a specific id already exists it is removed, otherwise a new one is created
+//result exists so the correct message is shown depending on whether we are looking at a 
+//current bookmark or a non existing one
 export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
   const exists = items.some((item) => item.id === entry.id)
   return {
@@ -541,7 +546,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const session = createSession()
-
+//Sets up bookmark persistence: loads bookmark.json on startup, 
+// keeps it in sync with the reactive store, 
+//and exposes list/toggle/remove/rename as the only way the rest of the app touches bookmarks.
     function createBookmark() {
       const [bookmarkStore, setBookmarkStore] = createStore<{
         ready: boolean
