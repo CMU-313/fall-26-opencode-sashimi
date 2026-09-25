@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js"
+import { explainPermissionReq } from "@opencode-ai/core/tool/permission-description"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
@@ -13,6 +14,11 @@ export function SessionPermissionDock(props: {
   const language = useLanguage()
 
   const toolDescription = () => {
+    const metadata = props.request.metadata ?? {}
+    if (metadata && Object.keys(metadata).length > 0) {
+      const value = explainPermissionReq(props.request.permission, metadata)
+      if (value) return value
+    }
     const key = `settings.permissions.tool.${props.request.permission}.description`
     const value = language.t(key as Parameters<typeof language.t>[0])
     if (value === key) return ""
@@ -32,7 +38,9 @@ export function SessionPermissionDock(props: {
       }
       footer={
         <>
-          <div />
+          <div data-slot="permission-action" class="min-w-0 flex-1 truncate whitespace-nowrap text-12-regular text-text-muted">
+            {toolDescription()}
+          </div>
           <div data-slot="permission-footer-actions">
             <Button variant="ghost" size="normal" onClick={() => props.onDecide("reject")} disabled={props.responding}>
               {language.t("ui.permission.deny")}
