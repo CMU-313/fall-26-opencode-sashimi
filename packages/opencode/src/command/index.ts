@@ -50,6 +50,10 @@ export const Default = {
   MISCONCEPTIONS: "misconceptions",
 } as const
 
+// Built-in commands whose prompt is sent to the model as synthetic text, so the transcript shows what the user typed
+// instead of the whole prompt.
+export const Quiet = new Set<string>([Default.MISCONCEPTIONS])
+
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
