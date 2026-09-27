@@ -1437,6 +1437,12 @@ const layer = Layer.effect(
         (part) => part.type !== "file" || !inputFiles.has(fileURLToPath(part.url)),
       )
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
+      const shown = Command.Quiet.has(input.command)
+        ? [
+            { type: "text" as const, text: `/${input.command} ${input.arguments}`.trim() },
+            ...uniqueTemplateParts.map((part) => (part.type === "text" ? { ...part, synthetic: true } : part)),
+          ]
+        : uniqueTemplateParts
       const parts = isSubtask
         ? [
             {
@@ -1448,7 +1454,7 @@ const layer = Layer.effect(
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : [...uniqueTemplateParts, ...(input.parts ?? [])]
+        : [...shown, ...(input.parts ?? [])]
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
