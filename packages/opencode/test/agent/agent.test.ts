@@ -80,6 +80,23 @@ it.instance("plan agent denies edits except .opencode/plans/*", () =>
   }),
 )
 
+// This is the check that hint mode cannot change the project. The prompt does
+// not do that. Write and apply_patch stay available unless the edit deny is
+// the last edit rule, and bash is its own flag.
+it.instance("hint agent is selectable and cannot change the project", () =>
+  Effect.gen(function* () {
+    const hint = yield* load((svc) => svc.get("hint"))
+    expect(hint?.mode).toBe("primary")
+    expect(hint?.hidden).toBeUndefined()
+    expect(evalPerm(hint, "edit")).toBe("deny")
+    expect(evalPerm(hint, "bash")).toBe("deny")
+    expect(evalPerm(hint, "task")).toBe("deny")
+    expect(Permission.disabled(["edit", "write", "apply_patch", "bash"], hint!.permission)).toEqual(
+      new Set(["edit", "write", "apply_patch", "bash"]),
+    )
+  }),
+)
+
 it.instance("plan agent denies the general subagent by default", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
@@ -749,6 +766,7 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        hint: { disable: true },
       },
     },
   },

@@ -9,6 +9,7 @@ import { PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import PROMPT_PLAN from "./prompt/plan.txt"
+import PROMPT_HINT from "./prompt/hint.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
 
@@ -22,6 +23,21 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const sessions = yield* Session.Service
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
+
+  // This text only shapes the reply. It does not turn tools off. The level
+  // climbs with each hint in a row, and the reply says the number because this
+  // part is hidden in the chat.
+  if (input.agent.name === "hint") {
+    const level = hintLevel(input.messages, input.session)
+    userMessage.parts.push({
+      id: PartID.ascending(),
+      messageID: userMessage.info.id,
+      sessionID: userMessage.info.sessionID,
+      type: "text",
+      text: PROMPT_HINT.replaceAll("${level}", String(level)),
+      synthetic: true,
+    })
+  }
 
   if (!flags.experimentalPlanMode) {
     if (input.agent.name === "plan") {
@@ -88,5 +104,26 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   userMessage.parts.push(part)
   return input.messages
 })
+
+// A message from another mode ends the streak. Leaving hint mode records
+// hintResetAt, and messages from before that time do not count either.
+const maxHintLevel = 5
+
+function hintLevel(messages: SessionV1.WithParts[], session?: Session.Info) {
+  const resetAt = session?.metadata?.hintResetAt
+  const users = messages.filter((msg) => {
+    if (msg.info.role !== "user") return false
+    // Messages from before the student left hint mode do not count.
+    if (typeof resetAt === "number" && msg.info.time.created <= resetAt) return false
+    return true
+  })
+  const broke = users.findLastIndex((msg) => msg.info.agent !== "hint")
+  const streak = users.length - broke - 1
+  return Math.min(Math.max(streak, 1), maxHintLevel)
+}
+
+export function label(messages: SessionV1.WithParts[], session?: Session.Info) {
+  return `Hint level ${hintLevel(messages, session)} of ${maxHintLevel}`
+}
 
 export * as SessionReminders from "./reminders"
