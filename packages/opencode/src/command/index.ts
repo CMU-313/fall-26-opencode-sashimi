@@ -9,6 +9,7 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_MISCONCEPTIONS from "./template/misconceptions.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -46,6 +47,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  MISCONCEPTIONS: "misconceptions",
 } as const
 
 export interface Interface {
@@ -85,6 +87,15 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.MISCONCEPTIONS] = {
+        name: Default.MISCONCEPTIONS,
+        description: "rank common student misconceptions in a directory of exported sessions",
+        source: "command",
+        get template() {
+          return PROMPT_MISCONCEPTIONS.replace("${cli}", self())
+        },
+        hints: hints(PROMPT_MISCONCEPTIONS),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
@@ -173,5 +184,20 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
+
+// Shell words that run this same opencode: the compiled binary, or `bun <flags> src/index.ts` from source. The entry
+// file is located from this module because the TUI runs commands in a worker, whose argv names the worker script.
+export function self() {
+  const words = path.basename(process.execPath).startsWith("bun")
+    ? [process.execPath, ...sourceFlags(process.execArgv), path.resolve(import.meta.dir, "../index.ts")]
+    : [process.execPath]
+  return words.map((word) => `'${word.replaceAll("'", `'\\''`)}'`).join(" ")
+}
+
+// Only `--conditions` changes how the source resolves; other bun flags, such as a relative `--cwd`, would break the
+// command when it runs from another directory.
+export function sourceFlags(flags: readonly string[]) {
+  return flags.filter((flag) => flag.startsWith("--conditions"))
+}
 
 export * as Command from "."
