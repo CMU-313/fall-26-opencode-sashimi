@@ -1,16 +1,22 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Sink } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Session } from "../../src/session/session"
 import { SessionReminders } from "../../src/session/reminders"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(
-  Layer.mergeAll(RuntimeFlags.layer(), Layer.mock(FSUtil.Service)({}), Layer.mock(Session.Service)({})),
-)
+// The hint path never calls the filesystem. Layer.mock still requires the
+// fields that are not Effects, or tsgo rejects an empty object.
+const filesystem = Layer.mock(FSUtil.Service)({
+  "~effect/platform/FileSystem": "~effect/platform/FileSystem",
+  sink: () => Sink.drain,
+  globMatch: () => false,
+})
+
+const it = testEffect(Layer.mergeAll(RuntimeFlags.layer(), filesystem, Layer.mock(Session.Service)({})))
 
 function userMessage(text: string): SessionV1.WithParts {
   return {
