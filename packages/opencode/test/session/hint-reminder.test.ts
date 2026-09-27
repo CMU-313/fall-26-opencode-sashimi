@@ -18,24 +18,30 @@ const filesystem = Layer.mock(FSUtil.Service)({
 
 const it = testEffect(Layer.mergeAll(RuntimeFlags.layer(), filesystem, Layer.mock(Session.Service)({})))
 
-function userMessage(text: string): SessionV1.WithParts {
+function userMessage(text: string, agent = "hint"): SessionV1.WithParts {
   return {
     info: {
-      id: "msg_hint",
+      id: `msg_${agent}_${text}`,
       sessionID: "ses_hint",
       role: "user",
       time: { created: 0 },
-      agent: "hint",
+      agent,
       model: { providerID: "test", modelID: "test" },
     },
-    parts: [{ id: "prt_user", sessionID: "ses_hint", messageID: "msg_hint", type: "text", text }],
+    parts: [{ id: `prt_${agent}_${text}`, sessionID: "ses_hint", messageID: `msg_${agent}_${text}`, type: "text", text }],
   } as SessionV1.WithParts
 }
 
+function hintText(messages: SessionV1.WithParts[]) {
+  const part = messages.at(-1)?.parts.find((item) => item.type === "text" && item.synthetic)
+  if (part?.type !== "text") return
+  return part.text
+}
+
 describe("hint reminder", () => {
-  // Checks the wording of the hint, not the tool flags. The reply should stay
-  // vague and should not include the solution. File changes are blocked in the
-  // hint agent permissions, which a different test covers.
+  // Checks the wording, not the tool flags. The prompt lists every level, but
+  // this turn must follow level 1 and must not include the solution. File
+  // changes are blocked in the hint agent permissions, which a different test covers.
   it.effect("adds one vague hint and does not give the solution", () =>
     Effect.gen(function* () {
       const messages = yield* SessionReminders.apply({
@@ -43,14 +49,50 @@ describe("hint reminder", () => {
         agent: { name: "hint" } as Agent.Info,
         session: {} as Session.Info,
       })
-      const hints = messages[0].parts.filter(
-        (part) => part.type === "text" && part.synthetic === true && part.text.includes("high-level hint"),
-      )
-      expect(hints).toHaveLength(1)
-      if (hints[0]?.type !== "text") return
-      expect(hints[0].text).toContain("Do not reveal the full solution")
-      expect(hints[0].text).toContain("Do not write the code that solves the task")
-      expect(hints[0].text).not.toContain("```")
+      const text = hintText(messages)
+      expect(text).toContain("Hint level 1 of 5")
+      expect(text).toContain("Follow only level 1")
+      expect(text).toContain("high-level hint")
+      expect(text).toContain("extremely specific")
+      expect(text).toContain("Do not reveal the full solution")
+      expect(text).toContain("Do not write the code that solves the task")
+      expect(text).not.toContain("```")
+    }),
+  )
+
+  // The prompt always lists every level. This checks that the filled-in number
+  // climbs and stops at 5, and the solution is still withheld.
+  it.effect("gets more specific and stops at level 5", () =>
+    Effect.gen(function* () {
+      const third = yield* SessionReminders.apply({
+        messages: [userMessage("one"), userMessage("two"), userMessage("three")],
+        agent: { name: "hint" } as Agent.Info,
+        session: {} as Session.Info,
+      })
+      const fifth = yield* SessionReminders.apply({
+        messages: [1, 2, 3, 4, 5, 6].map((n) => userMessage(String(n))),
+        agent: { name: "hint" } as Agent.Info,
+        session: {} as Session.Info,
+      })
+      expect(hintText(third)).toContain("Hint level 3 of 5")
+      expect(hintText(third)).toContain("Follow only level 3")
+      expect(hintText(fifth)).toContain("Hint level 5 of 5")
+      expect(hintText(fifth)).toContain("extremely specific")
+      expect(hintText(fifth)).toContain("Do not reveal the full solution")
+      expect(hintText(fifth)).not.toContain("Hint level 6 of 5")
+    }),
+  )
+
+  // A turn in another mode ends the streak. The next hint is vague again.
+  it.effect("starts over after a message from another mode", () =>
+    Effect.gen(function* () {
+      const messages = yield* SessionReminders.apply({
+        messages: [userMessage("stuck"), userMessage("fix it", "build"), userMessage("still stuck")],
+        agent: { name: "hint" } as Agent.Info,
+        session: {} as Session.Info,
+      })
+      expect(hintText(messages)).toContain("Hint level 1 of 5")
+      expect(hintText(messages)).toContain("high-level hint")
     }),
   )
 

@@ -24,15 +24,17 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
 
-  // This text only shapes the reply. It does not turn tools off. One fixed
-  // hint for now, so every turn in hint mode says the same thing.
+  // This text only shapes the reply. It does not turn tools off. The level
+  // climbs with each hint in a row, and the reply says the number because this
+  // part is hidden in the chat.
   if (input.agent.name === "hint") {
+    const level = hintLevel(input.messages)
     userMessage.parts.push({
       id: PartID.ascending(),
       messageID: userMessage.info.id,
       sessionID: userMessage.info.sessionID,
       type: "text",
-      text: PROMPT_HINT,
+      text: PROMPT_HINT.replaceAll("${level}", String(level)),
       synthetic: true,
     })
   }
@@ -102,5 +104,15 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   userMessage.parts.push(part)
   return input.messages
 })
+
+// A message from another mode ends the streak, so the next hint starts at 1.
+const maxHintLevel = 5
+
+function hintLevel(messages: SessionV1.WithParts[]) {
+  const users = messages.filter((msg) => msg.info.role === "user")
+  const broke = users.findLastIndex((msg) => msg.info.agent !== "hint")
+  const streak = users.length - broke - 1
+  return Math.min(Math.max(streak, 1), maxHintLevel)
+}
 
 export * as SessionReminders from "./reminders"

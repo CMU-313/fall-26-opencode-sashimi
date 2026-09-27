@@ -180,11 +180,11 @@ const layer = Layer.effect(
             native: true,
           },
           // These denies are what stop hint mode from changing files. The prompt only
-          // asks for a vague hint. Write and apply_patch follow the edit flag, but
+          // asks for a hint. Write and apply_patch follow the edit flag, but
           // only if that deny is the last edit rule. Bash and task are separate.
           hint: {
             name: "hint",
-            description: "Hint mode. Gives a high-level hint and cannot change files.",
+            description: "Hint mode. Each hint gets more specific, up to level 5, and cannot change files.",
             options: {},
             permission: Permission.merge(
               defaults,
