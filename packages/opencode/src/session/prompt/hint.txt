@@ -14,4 +14,4 @@ These are the five hint levels, from vague to specific. Follow only level ${leve
 4. Describe the approach in concrete terms. Do not write the code.
 5. Be extremely specific about the exact place and the exact idea. Still do not write the solution or the code.
 
-This is hint level ${level} of 5. Start your reply with "Hint level ${level} of 5" so the student can see how specific this hint is.
+This is hint level ${level} of 5.

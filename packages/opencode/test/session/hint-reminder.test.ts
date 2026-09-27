@@ -18,13 +18,13 @@ const filesystem = Layer.mock(FSUtil.Service)({
 
 const it = testEffect(Layer.mergeAll(RuntimeFlags.layer(), filesystem, Layer.mock(Session.Service)({})))
 
-function userMessage(text: string, agent = "hint"): SessionV1.WithParts {
+function userMessage(text: string, agent = "hint", created = 0): SessionV1.WithParts {
   return {
     info: {
       id: `msg_${agent}_${text}`,
       sessionID: "ses_hint",
       role: "user",
-      time: { created: 0 },
+      time: { created },
       agent,
       model: { providerID: "test", modelID: "test" },
     },
@@ -50,8 +50,10 @@ describe("hint reminder", () => {
         session: {} as Session.Info,
       })
       const text = hintText(messages)
-      expect(text).toContain("Hint level 1 of 5")
+      expect(text).toContain("This is hint level 1 of 5")
       expect(text).toContain("Follow only level 1")
+      expect(text).not.toContain("Start your reply")
+      expect(SessionReminders.label(messages)).toBe("Hint level 1 of 5")
       expect(text).toContain("high-level hint")
       expect(text).toContain("extremely specific")
       expect(text).toContain("Do not reveal the full solution")
@@ -74,9 +76,11 @@ describe("hint reminder", () => {
         agent: { name: "hint" } as Agent.Info,
         session: {} as Session.Info,
       })
-      expect(hintText(third)).toContain("Hint level 3 of 5")
+      expect(hintText(third)).toContain("This is hint level 3 of 5")
       expect(hintText(third)).toContain("Follow only level 3")
-      expect(hintText(fifth)).toContain("Hint level 5 of 5")
+      expect(SessionReminders.label(third)).toBe("Hint level 3 of 5")
+      expect(hintText(fifth)).toContain("This is hint level 5 of 5")
+      expect(SessionReminders.label(fifth)).toBe("Hint level 5 of 5")
       expect(hintText(fifth)).toContain("extremely specific")
       expect(hintText(fifth)).toContain("Do not reveal the full solution")
       expect(hintText(fifth)).not.toContain("Hint level 6 of 5")
@@ -91,8 +95,28 @@ describe("hint reminder", () => {
         agent: { name: "hint" } as Agent.Info,
         session: {} as Session.Info,
       })
-      expect(hintText(messages)).toContain("Hint level 1 of 5")
+      expect(hintText(messages)).toContain("This is hint level 1 of 5")
+      expect(SessionReminders.label(messages)).toBe("Hint level 1 of 5")
       expect(hintText(messages)).toContain("high-level hint")
+    }),
+  )
+
+  // Switching away records a time. Hint messages from before that do not count,
+  // so coming back starts at level 1 even without a message in the other mode.
+  it.effect("starts over after leaving hint mode", () =>
+    Effect.gen(function* () {
+      const session = { metadata: { hintResetAt: 5 } } as unknown as Session.Info
+      const messages = yield* SessionReminders.apply({
+        messages: [
+          userMessage("one", "hint", 1),
+          userMessage("two", "hint", 2),
+          userMessage("again", "hint", 10),
+        ],
+        agent: { name: "hint" } as Agent.Info,
+        session,
+      })
+      expect(hintText(messages)).toContain("This is hint level 1 of 5")
+      expect(SessionReminders.label(messages, session)).toBe("Hint level 1 of 5")
     }),
   )
 

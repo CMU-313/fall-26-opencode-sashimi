@@ -1199,6 +1199,18 @@ const layer = Layer.effect(
             sessionID,
           }
           yield* sessions.updateMessage(msg)
+          // The reminder is hidden, so this line is what the student actually
+          // sees. The model still gets the level in that reminder.
+          if (agent.name === "hint" && step === 1) {
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: msg.id,
+              sessionID,
+              type: "text",
+              text: SessionReminders.label(msgs, session),
+              time: { start: Date.now() },
+            })
+          }
 
           const finalizeInterruptedAssistant = Effect.gen(function* () {
             if (msg.time.completed) return

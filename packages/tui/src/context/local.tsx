@@ -89,6 +89,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+      // Leaving hint mode means the student is moving on. Remember that time
+      // so the next hint starts vague again, even if they switch back before
+      // sending a message.
+      function select(name: string) {
+        const shown = agentStore.current ?? agents().at(0)?.name
+        setAgentStore("current", name)
+        if (shown !== "hint" || name === "hint") return
+        if (route.data.type !== "session") return
+        const current = sync.session.get(route.data.sessionID)
+        if (!current) return
+        void sdk.client.session.update({
+          sessionID: route.data.sessionID,
+          metadata: { ...current.metadata, hintResetAt: Date.now() },
+        })
+      }
       return {
         list() {
           return agents()
@@ -103,7 +118,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          select(name)
         },
         move(direction: 1 | -1) {
           batch(() => {
@@ -113,7 +128,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (next < 0) next = agents().length - 1
             if (next >= agents().length) next = 0
             const value = agents()[next]
-            setAgentStore("current", value.name)
+            select(value.name)
           })
         },
         color(name: string) {
