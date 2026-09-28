@@ -163,13 +163,20 @@ export const MisconceptionsCommand = effectCmd({
     const categories = allFindings.length ? yield* merge(llm, allFindings, topics) : []
     const rows = rank({ findings: allFindings, categories, topics })
 
+    const ranking = table(rows, results.length - skipped.length)
+    // Saved even with --json, which is what the TUI command reads, so the TA always gets a readable copy. The name
+    // is not *.json so later runs do not mistake it for a transcript.
+    const saved = path.join(dir, "misconceptions-ranking.txt")
+    yield* Effect.promise(() => Bun.write(saved, ranking + EOL))
+    process.stderr.write(`Saved ranking to ${saved}${EOL}`)
+
     if (args.json) {
       process.stdout.write(
         JSON.stringify({ transcripts: results.length - skipped.length, rows, skipped }, null, 2) + EOL,
       )
       return
     }
-    process.stdout.write(table(rows, results.length - skipped.length) + EOL)
+    process.stdout.write(ranking + EOL)
     skipped.forEach((item) => process.stderr.write(`Skipped ${item.file}: ${item.error.split(EOL)[0]}${EOL}`))
   }),
 })
