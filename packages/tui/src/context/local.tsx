@@ -69,6 +69,13 @@ export function renameBookmark(items: LocalBookmark[], id: string, name: string)
   return items.map((item) => (item.id === id ? { ...item, name: trimmed || undefined } : item))
 }
 
+// Removes every bookmark belonging to the given session, leaving bookmarks
+// from other sessions untouched. Used to clean up bookmarks once their
+// session no longer exists (see the "session.deleted" handler below).
+export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: string) {
+  return items.filter((item) => item.sessionID !== sessionID)
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -596,7 +603,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       function prune(sessionID: string) {
-        const remaining = bookmarkStore.items.filter((item) => item.sessionID !== sessionID)
+        const remaining = pruneBookmarksForSession(bookmarkStore.items, sessionID)
         if (remaining.length === bookmarkStore.items.length) return
         setBookmarkStore("items", remaining)
         void save().catch(() => {})
