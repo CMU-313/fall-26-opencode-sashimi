@@ -8,7 +8,7 @@ import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { readJson, writeJsonAtomic } from "../util/persistence"
+import { isMissingFileError, readJson, writeJsonAtomic } from "../util/persistence"
 import { rename } from "fs/promises"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
@@ -594,7 +594,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           // else means the file exists but couldn't be parsed - back it up
           // rather than silently treating it as empty and overwriting it on
           // the next save.
-          if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return
+          if (isMissingFileError(error)) return
           await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
         })
         .finally(() => {
