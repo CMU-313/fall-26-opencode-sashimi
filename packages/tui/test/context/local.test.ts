@@ -4,6 +4,7 @@ import {
   recentModels,
   removeBookmark,
   renameBookmark,
+  sortBookmarks,
   toggleBookmark,
   type LocalBookmark,
 } from "../../src/context/local"
@@ -79,4 +80,31 @@ test("renaming a bookmark trims whitespace and clearing the name removes it", ()
 
   const cleared = renameBookmark(renamed, "a", "   ")
   expect(cleared[0].name).toBeUndefined()
+})
+
+test("the saved list shows the newest bookmark first", () => {
+  const items: LocalBookmark[] = [
+    { ...makeBookmark("a"), createdAt: 1 },
+    { ...makeBookmark("b"), createdAt: 3 },
+    { ...makeBookmark("c"), createdAt: 2 },
+  ]
+
+  expect(sortBookmarks(items).map((item) => item.id)).toEqual(["b", "c", "a"])
+})
+
+test("the saved list no longer shows a bookmark once it's removed", () => {
+  const afterAdd = toggleBookmark([], makeBookmark("a")).items
+  const afterRemove = removeBookmark(afterAdd, "a")
+
+  expect(sortBookmarks(afterRemove)).toEqual([])
+})
+
+test("sorting the saved list does not mutate the original array", () => {
+  const items: LocalBookmark[] = [
+    { ...makeBookmark("a"), createdAt: 1 },
+    { ...makeBookmark("b"), createdAt: 2 },
+  ]
+
+  sortBookmarks(items)
+  expect(items.map((item) => item.id)).toEqual(["a", "b"])
 })

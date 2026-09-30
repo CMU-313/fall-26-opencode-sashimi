@@ -76,6 +76,13 @@ export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: stri
   return items.filter((item) => item.sessionID !== sessionID)
 }
 
+// Newest-first ordering for the saved-bookmarks list (dialog-bookmark-list.tsx).
+// Pulled out as its own function, like the other bookmark helpers, so the
+// ordering can be tested without spinning up the full local context.
+export function sortBookmarks(items: LocalBookmark[]) {
+  return items.toSorted((a, b) => b.createdAt - a.createdAt)
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -615,7 +622,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         list() {
-          return bookmarkStore.items.toSorted((a, b) => b.createdAt - a.createdAt)
+          return sortBookmarks(bookmarkStore.items)
         },
         has(id: string) {
           return bookmarkStore.items.some((item) => item.id === id)
