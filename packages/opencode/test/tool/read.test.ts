@@ -215,6 +215,7 @@ describe("tool.read external_directory permission", () => {
       const read = items.find((item) => item.permission === "read")
       expect(read).toBeDefined()
       expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+      expect(read!.metadata).toMatchObject({ filepath: path.join(dir, "src", "secret.ts") })
     }),
   )
 
