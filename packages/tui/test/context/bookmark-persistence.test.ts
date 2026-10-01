@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import { mkdtemp, rm, writeFile, readFile } from "fs/promises"
 import { tmpdir } from "os"
-import { loadBookmarks, saveBookmarks, type LocalBookmark } from "../../src/context/local"
+import { loadBookmarks, mergeBookmarks, saveBookmarks, type LocalBookmark } from "../../src/context/local"
 
 // These tests exercise the real filesystem (a temp directory per test), not
 // mocked file I/O - that's the point. The unit tests on isMissingFileError
@@ -84,4 +84,31 @@ test("after recovering from a corrupted file, saving creates a fresh valid bookm
 
   await saveBookmarks(filePath, [makeBookmark("a")])
   expect(await loadBookmarks(filePath)).toEqual([makeBookmark("a")])
+})
+
+test("two sessions bookmarking different responses around the same time both survive, simulating two TUIs open at once", async () => {
+  // Session 1 starts with an empty file and loads its baseline.
+  const session1Base = await loadBookmarks(filePath)
+  expect(session1Base).toEqual([])
+
+  // Session 2 opens a moment later and loads the same (still empty) baseline.
+  const session2Base = await loadBookmarks(filePath)
+  expect(session2Base).toEqual([])
+
+  // Session 1 bookmarks response "a" and saves - merging its baseline against
+  // whatever's currently on disk (still nothing).
+  const session1Items = [makeBookmark("a")]
+  const session1OnDisk = await loadBookmarks(filePath)
+  const session1Merged = mergeBookmarks(session1Base, session1Items, session1OnDisk)
+  await saveBookmarks(filePath, session1Merged)
+
+  // Session 2, unaware of session 1's save, bookmarks response "b" and saves.
+  // Without merge-on-save this write would silently wipe out "a".
+  const session2Items = [makeBookmark("b")]
+  const session2OnDisk = await loadBookmarks(filePath)
+  const session2Merged = mergeBookmarks(session2Base, session2Items, session2OnDisk)
+  await saveBookmarks(filePath, session2Merged)
+
+  const final = await loadBookmarks(filePath)
+  expect(final.map((item) => item.id).sort()).toEqual(["a", "b"])
 })

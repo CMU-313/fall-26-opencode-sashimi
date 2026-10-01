@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import {
   parseModel,
   recentModels,
+  mergeBookmarks,
   removeBookmark,
   renameBookmark,
   sortBookmarks,
@@ -107,4 +108,62 @@ test("sorting the saved list does not mutate the original array", () => {
 
   sortBookmarks(items)
   expect(items.map((item) => item.id)).toEqual(["a", "b"])
+})
+
+// mergeBookmarks is what keeps two TUI sessions open at once from clobbering
+// each other's bookmarks when they both save around the same time - without
+// it, whichever session's save() ran last would silently overwrite the file
+// with only its own in-memory list.
+test("a bookmark added by another TUI session is picked up, not lost", () => {
+  const base = [makeBookmark("a")].map((b) => ({ ...b, createdAt: 1 }))
+  const mine = base // this session hasn't changed anything
+  const theirs = [...base, { ...makeBookmark("b"), createdAt: 2 }] // the other session added "b"
+
+  expect(mergeBookmarks(base, mine, theirs).map((item) => item.id).sort()).toEqual(["a", "b"])
+})
+
+test("a bookmark this session adds is kept even if the other session hasn't seen it yet", () => {
+  const base = [{ ...makeBookmark("a"), createdAt: 1 }]
+  const mine = [...base, { ...makeBookmark("b"), createdAt: 2 }] // this session added "b"
+  const theirs = base // the other session's copy is still the old one
+
+  expect(mergeBookmarks(base, mine, theirs).map((item) => item.id).sort()).toEqual(["a", "b"])
+})
+
+test("removing a bookmark locally is not undone by the other session's stale copy still having it", () => {
+  const base = [{ ...makeBookmark("a"), createdAt: 1 }]
+  const mine: LocalBookmark[] = [] // this session removed "a"
+  const theirs = base // the other session hasn't removed it on their end
+
+  expect(mergeBookmarks(base, mine, theirs)).toEqual([])
+})
+
+test("a bookmark removed by the other session is not resurrected by this session's stale copy", () => {
+  const base = [{ ...makeBookmark("a"), createdAt: 1 }]
+  const mine = base // this session hasn't touched it
+  const theirs: LocalBookmark[] = [] // the other session removed it
+
+  expect(mergeBookmarks(base, mine, theirs)).toEqual([])
+})
+
+test("both sessions adding different bookmarks at once keeps both, order aside", () => {
+  const base: LocalBookmark[] = []
+  const mine = [{ ...makeBookmark("a"), createdAt: 1 }]
+  const theirs = [{ ...makeBookmark("b"), createdAt: 2 }]
+
+  expect(mergeBookmarks(base, mine, theirs).map((item) => item.id).sort()).toEqual(["a", "b"])
+})
+
+test("a rename in this session wins over the other session's unchanged copy of the same bookmark", () => {
+  const base = [{ ...makeBookmark("a"), createdAt: 1 }]
+  const mine = [{ ...base[0], name: "My new name" }]
+  const theirs = base // the other session still has the old (unnamed) copy
+
+  expect(mergeBookmarks(base, mine, theirs)).toEqual(mine)
+})
+
+test("both sessions unchanged since base merges back to exactly the same list", () => {
+  const base = [{ ...makeBookmark("a"), createdAt: 1 }, { ...makeBookmark("b"), createdAt: 2 }]
+
+  expect(mergeBookmarks(base, base, base).map((item) => item.id).sort()).toEqual(["a", "b"])
 })

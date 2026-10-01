@@ -114,6 +114,52 @@ export function sortBookmarks(items: LocalBookmark[]) {
   return items.toSorted((a, b) => b.createdAt - a.createdAt)
 }
 
+// Reconciles two TUI sessions writing to the same bookmark.json at once.
+// Without this, the second session's save() would just overwrite the file
+// with its own in-memory list, silently losing whatever the first session
+// had just added - no error, no warning, the bookmark is just gone.
+//
+// `base` is the last state this session knows it shared with disk (what it
+// loaded at startup, or the result of its last successful save). `mine` is
+// this session's current in-memory list. `theirs` is whatever is on disk
+// right now, freshly re-read immediately before writing.
+//
+// For each bookmark id, a three-way diff against `base` tells added from
+// removed: an id missing from `mine` that was already missing from `base`
+// is new (added by the other session, since base) - keep it. An id missing
+// from `mine` that `base` DID have is a deletion made by someone, so it's
+// dropped rather than resurrected - this is what keeps a local remove() from
+// coming back to life just because the other session's copy still has it.
+// The same logic applies symmetrically to `theirs`. An id present in both
+// `mine` and `theirs` keeps mine's version, since that's whatever this
+// session just changed (e.g. a rename) and is presumably the freshest edit.
+export function mergeBookmarks(
+  base: LocalBookmark[],
+  mine: LocalBookmark[],
+  theirs: LocalBookmark[],
+): LocalBookmark[] {
+  const baseIds = new Set(base.map((item) => item.id))
+  const mineById = new Map(mine.map((item) => [item.id, item]))
+  const theirsById = new Map(theirs.map((item) => [item.id, item]))
+  const allIds = new Set([...mineById.keys(), ...theirsById.keys()])
+
+  const result: LocalBookmark[] = []
+  for (const id of allIds) {
+    const inMine = mineById.has(id)
+    const inTheirs = theirsById.has(id)
+    const inBase = baseIds.has(id)
+
+    if (inMine && inTheirs) {
+      result.push(mineById.get(id)!)
+    } else if (inMine && !inTheirs) {
+      if (!inBase) result.push(mineById.get(id)!)
+    } else if (!inMine && inTheirs) {
+      if (!inBase) result.push(theirsById.get(id)!)
+    }
+  }
+  return result
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -607,20 +653,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const state = {
         pending: false,
       }
+      // The last state this session knows it shared with disk - either what
+      // it loaded at startup, or the result of its own last successful save.
+      // Used to tell "added elsewhere since we last synced" apart from
+      // "deliberately removed" when merging with another TUI session. See
+      // mergeBookmarks for why this is needed.
+      let baseline: LocalBookmark[] = []
 
       // Awaited by callers so a failed write (e.g. disk full) surfaces as a
-      // thrown error instead of silently reporting success.
+      // thrown error instead of silently reporting success. Re-reads the
+      // file immediately before writing and merges with it, so a second TUI
+      // session saving around the same time doesn't silently clobber this
+      // session's bookmarks (or vice versa).
       async function save() {
         if (!bookmarkStore.ready) {
           state.pending = true
           return
         }
         state.pending = false
-        await saveBookmarks(filePath, bookmarkStore.items)
+        const onDisk = await loadBookmarks(filePath)
+        const merged = mergeBookmarks(baseline, bookmarkStore.items, onDisk)
+        await saveBookmarks(filePath, merged)
+        baseline = merged
+        setBookmarkStore("items", merged)
       }
 
       loadBookmarks(filePath)
-        .then((items) => setBookmarkStore("items", items))
+        .then((items) => {
+          baseline = items
+          setBookmarkStore("items", items)
+        })
         .finally(() => {
           setBookmarkStore("ready", true)
           if (state.pending) void save().catch(() => {})
