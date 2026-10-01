@@ -20,10 +20,12 @@
 - Delete the session a bookmark belongs to (`<leader> l` to open session list) then `ctrl d` twice to delete, and confirm bookmarks from that session are deleted from the list.
 ### Written tests for this feature 
 #### Location of tests
-- `packages/tui/test/context/local.test.ts` has the bookmark add/toggle/remove/rename/sort tests
+- `packages/tui/test/context/local.test.ts` has the bookmark add/toggle/remove/rename/sort/merge tests
 - `packages/tui/test/context/bookmark-prune.test.ts` has cleanup logic tests for deleting sessions
 -  `packages/tui/test/util/persistence.test.ts` tests for file read error when loading bookmarks
 - `packages/tui/test/util/locale.test.ts` tests for emoji and plain text truncation 
+- `packages/tui/test/context/bookmark-persistence.test.ts` has real filesystem tests for saving and loading `bookmark.json`, recovering a corrupted file, and two TUIs saving at the same time
+- `packages/tui/test/context/bookmark-e2e.test.ts` has true end-to-end tests that mount the real app's provider stack (SDK, sync, route, etc.) against a real file, not just the extracted functions
 #### What's being tested
 Looking at the acceptance criterion, we can see it is all tested
 - Bookmarking a response adds it to the list (`toggleBookmark`)
@@ -33,9 +35,16 @@ Looking at the acceptance criterion, we can see it is all tested
 - Renaming a bookmark will correctly update it (`renameBookmark`)
 - Bookmarks are cleared when session is deleted (`pruneBookmarksForSession`)
 - A missing `bookmark.json` from a first run for example, will be handled properly as no bookmarks, which makes it persistent
+- A corrupted `bookmark.json` gets backed up instead of discarded
+- Saving and loading `bookmark.json` works on a real file, not just a mocked object (`loadBookmarks`/ `saveBookmarks`)
+- Two TUI sessions open at once will not overwrite each other's bookmarks when they are saved at the same time (`mergeBookmarks`)
+- (end to end) A real `session.deleted` SDK event fires through the actual event system, prunes that session's bookmarks, and the change is confirmed on the real file on disk
+- (end to end) A `session.deleted` event for an unrelated session correctly leaves other sessions' bookmarks untouched
+- (end to end) Two actual app sessions (not two isolated function calls) sharing one `bookmark.json` each bookmark a different response at the same time, and both survive
 #### Why these are sufficient
-- Every mutation (`toggle`/`remove`/`prune`/`sort`) is a pure function that I export so that they can be tested with simple arrays, so that the logic of those functions can be tested without depending on the UI. The UI was tested manually, as can be seen in the screen recordings.
+- Every mutation (`toggle`/`remove`/`prune`/`sort`/`merge`) is a pure function that I export so that they can be tested with simple arrays, so that the logic of those functions can be tested without depending on the UI. The UI was tested manually, as can be seen in the screen recordings.
 - All these tests cover my acceptance criteria exhaustively (as can be seen in section above)
-- Edge cases that were found were also covered, such as trying to remove a bookmark that doesn't exist, renaming a bookmark to blank or whitespace, pruning a session with no bookmarks, pruning a session with bookmarks, having a corrupted or missing bookmark file.
-- I also did some manual testing that cover things that could not be tested effectively with automated tests. There are three things specifically I tested. I tested that bookmarks genuinely persist across restarted OpenCode and across sessions. I also tested that the keybinds are correctly wired, and that the app can correctly handle errors. I manually corrupted `bookmark.json` to make sure the app backs it up to a `bookmark.json.corrupt` file, and then trying to save a bookmark when the state directory is unwritebale and getting an error notification instead of failing silently. The unit tests for the missing `bookmark.json` only look for correct error classification, the manual tests showed that the recovery behavior was correct.
-- Combined, all the acceptance criterion has both has a unit test proving the logic is correct, and a manual test proving it works with the UI and file system. However there is still a gap because there is no automated component level coverage for the bookmark list viewing and bookmark renaming, and no automated tests for the keybinds. The manual testing is my current substitute for that, and a `testRender` based test would be the next natural step to close that gap. 
+- Edge cases that were found were also covered, such as trying to remove a bookmark that doesn't exist, renaming a bookmark to blank or whitespace, pruning a session with no bookmarks, pruning a session with bookmarks, having a corrupted or missing bookmark file, and two sessions saving different bookmarks around the same time.
+- Save/load and corruption recovery used to only be manually verified. They're now also automated against a real temporary file (not mocks) in `bookmark-persistence.test.ts`, the file gets renamed and backed up to `bookmark.json.corrupt-<timestamp>`, not just that the error gets classified correctly. That same file also has an integration test simulating two sessions writing to the same `bookmark.json`, proving `mergeBookmarks` resolves the conflict correctly against real file I/O. `bookmark-e2e.test.ts` goes further and proves this same thing through the actual running app, two real sessions with independent reactive state.
+- I still have manual tests for making the state directory unwritable and confirming a failed save produces an error instead of failing silently (I manually tested this and got an error notification as expected), and confirming the keybinds are correctly wired to the right commands.
+- Combined, all the acceptance criterion has both has a unit test proving the logic is correct, and a manual test proving it works with the UI and file system. The end-to-end tests added target two specific things: the session.deleted cleanup behavior (a real event firing through the real event system, including a negative case for an unrelated session) and the two-TUI merge fix (two real, independently reactive sessions sharing one file). However there is still a gap because there is no automated component level coverage for the bookmark list viewing and bookmark renaming, and no automated tests for the keybinds. The manual testing is my current substitute for that, and a `testRender` based test would be the next natural step to close that gap. 
