@@ -149,6 +149,12 @@ describe("EditTool", () => {
                 })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
+                expect(assertions[0]?.metadata).toMatchObject({
+                  path: "hello.txt",
+                  oldString: "before",
+                  newString: "after",
+                })
+                expect(assertions[0]?.metadata).not.toHaveProperty("input")
                 expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
               }),
             ),

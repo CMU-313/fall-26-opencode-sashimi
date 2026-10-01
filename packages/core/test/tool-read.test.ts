@@ -187,6 +187,8 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
+      expect(assertions[0]?.metadata).toMatchObject({ path: "README.md" })
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(readCalls).toEqual([
         {
           input: AbsolutePath.make(path.join(process.cwd(), "README.md")),

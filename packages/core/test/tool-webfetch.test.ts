@@ -93,6 +93,7 @@ describe("WebFetchTool registration", () => {
       expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
       ])
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(requests).toMatchObject([{ url, headers: { accept: expect.stringContaining("text/plain;q=1.0") } }])
     }),
   )

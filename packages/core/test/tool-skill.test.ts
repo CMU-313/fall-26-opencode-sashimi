@@ -105,6 +105,7 @@ describe("SkillTool", () => {
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
             ])
+            expect(assertions[0]?.metadata).toEqual({ name: "effect" })
             expect(
               yield* executeTool(registry, {
                 sessionID,
