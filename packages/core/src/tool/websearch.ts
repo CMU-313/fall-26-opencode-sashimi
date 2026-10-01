@@ -211,7 +211,6 @@ const layer = Layer.effectDiscard(
                 resources: [input.query],
                 save: ["*"],
                 metadata: {
-                  input: { ...input, provider },
                   ...input,
                   provider,
                 },

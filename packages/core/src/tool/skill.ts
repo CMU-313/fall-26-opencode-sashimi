@@ -78,7 +78,6 @@ const layer = Layer.effectDiscard(
                   resources: [skill.name],
                   save: [skill.name],
                   metadata: {
-                    input: { name: input.name },
                     name: input.name,
                   },
                   sessionID: context.sessionID,

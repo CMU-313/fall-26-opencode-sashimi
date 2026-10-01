@@ -81,7 +81,6 @@ const layer = Layer.effectDiscard(
                   resources: [target.resource],
                   save: ["*"],
                   metadata: {
-                    input: { path: input.path, content: input.content },
                     path: input.path,
                     content: input.content,
                   },

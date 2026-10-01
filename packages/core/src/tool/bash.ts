@@ -144,7 +144,6 @@ const layer = Layer.effectDiscard(
                 resources: [input.command],
                 save: [input.command],
                 metadata: {
-                  input: { command: input.command, workdir: input.workdir, timeout: input.timeout },
                   command: input.command,
                   workdir: input.workdir,
                   timeout: input.timeout,

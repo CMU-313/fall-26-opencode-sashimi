@@ -118,7 +118,7 @@ const layer = Layer.effectDiscard(
                   resources: [...new Set(targets.map(({ target }) => target.resource))],
                   save: ["*"],
                   metadata: {
-                    input: { patchText: input.patchText },
+                    path: targets[0]?.target.resource,
                     patchText: input.patchText,
                   },
                   sessionID: context.sessionID,
