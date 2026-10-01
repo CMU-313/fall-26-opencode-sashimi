@@ -140,7 +140,6 @@ const layer = Layer.effectDiscard(
                 resources: [input.url],
                 save: ["*"],
                 metadata: {
-                  input: { ...input },
                   ...input,
                 },
                 sessionID: context.sessionID,

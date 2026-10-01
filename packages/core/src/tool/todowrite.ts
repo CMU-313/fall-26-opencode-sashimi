@@ -43,7 +43,6 @@ const layer = Layer.effectDiscard(
                 resources: ["*"],
                 save: ["*"],
                 metadata: {
-                  input: { todos: input.todos },
                   todos: input.todos,
                 },
                 sessionID: context.sessionID,
