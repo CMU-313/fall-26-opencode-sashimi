@@ -99,15 +99,9 @@ const describePatternAction = (permission: string, record: Record<string, unknow
     grep: "search for",
     webfetch: "fetch",
     websearch: "search the web for",
-    read: "read the file",
-    write: "write to",
-    edit: "edit",
   }[permission]
 
   if (!pattern || !label) return undefined
-  if (permission === "webfetch" || permission === "websearch") {
-    return `Agent wants to ${label} ${truncateText(pattern, 80)}`
-  }
   return `Agent wants to ${label} ${truncateText(pattern, 80)}`
 }
 
@@ -131,8 +125,11 @@ export function explainPermissionReq(permission: string, metadata: unknown): str
       return describePatternAction(permission, record) ?? "Agent wants to run a tool"
     case "todowrite":
       return "Agent wants to update the todo list"
-    case "skill":
-      return `Agent wants to load the skill ${truncateText(getString(record, ["name", "skill"]), 50) || ""}`.trimEnd() || "Agent wants to load a skill"
+    case "skill": {
+      const name = truncateText(getString(record, ["name", "skill"]), 50)
+      if (!name) return "Agent wants to load a skill"
+      return `Agent wants to load the skill ${name}`
+    }
     default: {
       const firstSignal = getString(record, ["command", "path", "filePath", "filepath", "query", "pattern", "url", "name", "description"])
       if (!firstSignal) return `Agent wants to run ${permission}`
