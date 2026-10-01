@@ -179,6 +179,7 @@ describe("WebSearchTool registration", () => {
           },
         },
       ])
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(requests).toEqual([
         {
           url: WebSearchTool.EXA_URL,

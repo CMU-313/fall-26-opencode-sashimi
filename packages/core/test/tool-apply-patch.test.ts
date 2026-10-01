@@ -187,6 +187,10 @@ describe("ApplyPatchTool", () => {
                 expect(assertions).toMatchObject([
                   { sessionID, action: "edit", resources: ["nested/new.txt", "update.txt", "remove.txt"], save: ["*"] },
                 ])
+                expect(assertions[0]?.metadata).toEqual({
+                  path: "nested/new.txt",
+                  patchText: expect.any(String),
+                })
                 expect(readsBeforeEditApproval).toBe(0)
                 expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "nested/new.txt"), "utf8"))).toBe(
                   "created\n",
