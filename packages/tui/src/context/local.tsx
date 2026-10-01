@@ -49,6 +49,37 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
   )
 }
 
+// Loads bookmarks from a real bookmark.json on disk, handling every way that
+// file can be missing or broken so callers don't have to. A missing file just
+// means there are no bookmarks yet (empty list, same as the fresh-install
+// case). Anything else wrong with it - invalid JSON, an unexpected shape -
+// means the file exists but couldn't be used, so it's backed up (renamed with
+// a `.corrupt-<timestamp>` suffix) rather than silently treated as empty and
+// overwritten on the next save, which would destroy whatever was in it.
+// Exported (and operating on a real filePath, not a mocked one) so the actual
+// save/load/corruption-recovery behavior can be tested against the real
+// filesystem, not just the error-classification logic underneath it.
+export async function loadBookmarks(filePath: string): Promise<LocalBookmark[]> {
+  try {
+    const data = await readJson<unknown>(filePath)
+    if (!data || typeof data !== "object") return []
+    const items = (data as Record<string, unknown>).items
+    if (!Array.isArray(items)) return []
+    return items.filter(isLocalBookmark)
+  } catch (error) {
+    if (isMissingFileError(error)) return []
+    await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
+    return []
+  }
+}
+
+// Writes the given bookmarks to a real bookmark.json on disk, atomically (see
+// writeJsonAtomic). Paired with loadBookmarks as the other half of the
+// save/load round trip, and tested the same way - against real files.
+export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
+  await writeJsonAtomic(filePath, { items })
+}
+
 //Returns an array of bookmarks without the one removed
 export function removeBookmark(items: LocalBookmark[], id: string) {
   return items.filter((item) => item.id !== id)
@@ -585,25 +616,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
         state.pending = false
-        await writeJsonAtomic(filePath, {
-          items: bookmarkStore.items,
-        })
+        await saveBookmarks(filePath, bookmarkStore.items)
       }
 
-      readJson<unknown>(filePath)
-        .then((x) => {
-          if (!x || typeof x !== "object") return
-          const items = (x as Record<string, unknown>).items
-          if (Array.isArray(items)) setBookmarkStore("items", items.filter(isLocalBookmark))
-        })
-        .catch(async (error) => {
-          // A missing file just means there are no bookmarks yet. Anything
-          // else means the file exists but couldn't be parsed - back it up
-          // rather than silently treating it as empty and overwriting it on
-          // the next save.
-          if (isMissingFileError(error)) return
-          await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
-        })
+      loadBookmarks(filePath)
+        .then((items) => setBookmarkStore("items", items))
         .finally(() => {
           setBookmarkStore("ready", true)
           if (state.pending) void save().catch(() => {})
