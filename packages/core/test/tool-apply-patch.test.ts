@@ -187,6 +187,7 @@ describe("ApplyPatchTool", () => {
                 expect(assertions).toMatchObject([
                   { sessionID, action: "edit", resources: ["nested/new.txt", "update.txt", "remove.txt"], save: ["*"] },
                 ])
+                // Tool integration: the actual multi-file call must provide a concrete permission target.
                 expect(assertions[0]?.metadata).toEqual({
                   path: "nested/new.txt",
                   patchText: expect.any(String),

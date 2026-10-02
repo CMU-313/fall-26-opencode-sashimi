@@ -122,6 +122,7 @@ describe("WriteTool", () => {
               "created",
             )
             expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["src/new.txt"], save: ["*"] }])
+            // Tool integration: a real write request exposes its target and content directly to the prompt.
             expect(assertions[0]?.metadata).toEqual({ path: "src/new.txt", content: "created" })
             expect(writes).toEqual([path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt")])
           }),

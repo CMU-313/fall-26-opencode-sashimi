@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { explainPermissionReq } from "@opencode-ai/core/tool/permission-description"
 
+// Unit tests for the pure formatter; tool-level tests cover metadata construction.
 describe("explainPermissionReq", () => {
   test("describes read operations using the actual file path", () => {
     expect(
