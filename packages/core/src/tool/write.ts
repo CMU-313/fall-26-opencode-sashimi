@@ -80,6 +80,10 @@ const layer = Layer.effectDiscard(
                   action: "edit",
                   resources: [target.resource],
                   save: ["*"],
+                  metadata: {
+                    path: input.path,
+                    content: input.content,
+                  },
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,

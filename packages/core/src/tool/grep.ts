@@ -85,6 +85,7 @@ const layer = Layer.effectDiscard(
                 metadata: {
                   root: ".",
                   path: input.path,
+                  pattern: input.pattern,
                   include: input.include,
                   limit: input.limit,
                 },
