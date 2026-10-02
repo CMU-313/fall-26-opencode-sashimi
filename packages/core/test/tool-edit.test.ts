@@ -149,6 +149,7 @@ describe("EditTool", () => {
                 })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
+                // Tool integration: verify the real edit call puts its arguments directly in permission metadata.
                 expect(assertions[0]?.metadata).toMatchObject({
                   path: "hello.txt",
                   oldString: "before",

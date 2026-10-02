@@ -63,6 +63,7 @@ const withTools = <A, E, R>(directory: string, body: (registry: ToolRegistry.Int
   )
 
 describe("search tool permission metadata", () => {
+  // Registry-level integration: execute both tools with real filesystem setup and a stub search service.
   it.live("passes flat glob and grep inputs to permission requests", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
