@@ -8,7 +8,8 @@ import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
-import { readJson, writeJsonAtomic } from "../util/persistence"
+import { isMissingFileError, readJson, writeJsonAtomic } from "../util/persistence"
+import { rename } from "fs/promises"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
@@ -22,6 +23,141 @@ export type LocalTheme = {
   primary: RGBA
   error: RGBA
   info: RGBA
+}
+
+// Added a bookmark type with fields to identify it 
+export type LocalBookmark = {
+  id: string
+  sessionID: string
+  sessionTitle: string
+  text: string
+  createdAt: number
+  name?: string
+}
+//This function checks to make sure the bookmarks from bookmark.json
+//that are read in have the proper fields, so bad entries can be filtered out
+function isLocalBookmark(value: unknown): value is LocalBookmark {
+  if (!value || typeof value !== "object") return false
+  const item = value as Record<string, unknown>
+  return (
+    typeof item.id === "string" &&
+    typeof item.sessionID === "string" &&
+    typeof item.sessionTitle === "string" &&
+    typeof item.text === "string" &&
+    typeof item.createdAt === "number" &&
+    (item.name === undefined || typeof item.name === "string")
+  )
+}
+
+// Loads bookmarks from a real bookmark.json on disk, handling every way that
+// file can be missing or broken so callers don't have to. A missing file just
+// means there are no bookmarks yet (empty list, same as the fresh-install
+// case). Anything else wrong with it - invalid JSON, an unexpected shape -
+// means the file exists but couldn't be used, so it's backed up (renamed with
+// a `.corrupt-<timestamp>` suffix) rather than silently treated as empty and
+// overwritten on the next save, which would destroy whatever was in it.
+// Exported (and operating on a real filePath, not a mocked one) so the actual
+// save/load/corruption-recovery behavior can be tested against the real
+// filesystem, not just the error-classification logic underneath it.
+export async function loadBookmarks(filePath: string): Promise<LocalBookmark[]> {
+  try {
+    const data = await readJson<unknown>(filePath)
+    if (!data || typeof data !== "object") return []
+    const items = (data as Record<string, unknown>).items
+    if (!Array.isArray(items)) return []
+    return items.filter(isLocalBookmark)
+  } catch (error) {
+    if (isMissingFileError(error)) return []
+    await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
+    return []
+  }
+}
+
+// Writes the given bookmarks to a real bookmark.json on disk, atomically (see
+// writeJsonAtomic). Paired with loadBookmarks as the other half of the
+// save/load round trip, and tested the same way - against real files.
+export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
+  await writeJsonAtomic(filePath, { items })
+}
+
+//Returns an array of bookmarks without the one removed
+export function removeBookmark(items: LocalBookmark[], id: string) {
+  return items.filter((item) => item.id !== id)
+}
+//If a bookmark with a specific id already exists it is removed, otherwise a new one is created
+//result exists so the correct message is shown depending on whether we are looking at a 
+//current bookmark or a non existing one
+export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
+  const exists = items.some((item) => item.id === entry.id)
+  return {
+    items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
+    result: exists ? ("removed" as const) : ("added" as const),
+  }
+}
+
+export function renameBookmark(items: LocalBookmark[], id: string, name: string) {
+  const trimmed = name.trim()
+  return items.map((item) => (item.id === id ? { ...item, name: trimmed || undefined } : item))
+}
+
+// Removes every bookmark belonging to the given session, leaving bookmarks
+// from other sessions untouched. Used to clean up bookmarks once their
+// session no longer exists (see the "session.deleted" handler below).
+export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: string) {
+  return items.filter((item) => item.sessionID !== sessionID)
+}
+
+// Newest-first ordering for the saved-bookmarks list (dialog-bookmark-list.tsx).
+// Pulled out as its own function, like the other bookmark helpers, so the
+// ordering can be tested without spinning up the full local context.
+export function sortBookmarks(items: LocalBookmark[]) {
+  return items.toSorted((a, b) => b.createdAt - a.createdAt)
+}
+
+// Reconciles two TUI sessions writing to the same bookmark.json at once.
+// Without this, the second session's save() would just overwrite the file
+// with its own in-memory list, silently losing whatever the first session
+// had just added - no error, no warning, the bookmark is just gone.
+//
+// `base` is the last state this session knows it shared with disk (what it
+// loaded at startup, or the result of its last successful save). `mine` is
+// this session's current in-memory list. `theirs` is whatever is on disk
+// right now, freshly re-read immediately before writing.
+//
+// For each bookmark id, a three-way diff against `base` tells added from
+// removed: an id missing from `mine` that was already missing from `base`
+// is new (added by the other session, since base) - keep it. An id missing
+// from `mine` that `base` DID have is a deletion made by someone, so it's
+// dropped rather than resurrected - this is what keeps a local remove() from
+// coming back to life just because the other session's copy still has it.
+// The same logic applies symmetrically to `theirs`. An id present in both
+// `mine` and `theirs` keeps mine's version, since that's whatever this
+// session just changed (e.g. a rename) and is presumably the freshest edit.
+export function mergeBookmarks(
+  base: LocalBookmark[],
+  mine: LocalBookmark[],
+  theirs: LocalBookmark[],
+): LocalBookmark[] {
+  const baseIds = new Set(base.map((item) => item.id))
+  const mineById = new Map(mine.map((item) => [item.id, item]))
+  const theirsById = new Map(theirs.map((item) => [item.id, item]))
+  const allIds = new Set([...mineById.keys(), ...theirsById.keys()])
+
+  const result: LocalBookmark[] = []
+  for (const id of allIds) {
+    const inMine = mineById.has(id)
+    const inTheirs = theirsById.has(id)
+    const inBase = baseIds.has(id)
+
+    if (inMine && inTheirs) {
+      result.push(mineById.get(id)!)
+    } else if (inMine && !inTheirs) {
+      if (!inBase) result.push(mineById.get(id)!)
+    } else if (!inMine && inTheirs) {
+      if (!inBase) result.push(theirsById.get(id)!)
+    }
+  }
+  return result
 }
 
 export function parseModel(model: string) {
@@ -501,6 +637,111 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const session = createSession()
+//Sets up bookmark persistence: loads bookmark.json on startup, 
+// keeps it in sync with the reactive store, 
+//and exposes list/toggle/remove/rename as the only way the rest of the app touches bookmarks.
+    function createBookmark() {
+      const [bookmarkStore, setBookmarkStore] = createStore<{
+        ready: boolean
+        items: LocalBookmark[]
+      }>({
+        ready: false,
+        items: [],
+      })
+
+      const filePath = path.join(paths.state, "bookmark.json")
+      const state = {
+        pending: false,
+      }
+      // The last state this session knows it shared with disk - either what
+      // it loaded at startup, or the result of its own last successful save.
+      // Used to tell "added elsewhere since we last synced" apart from
+      // "deliberately removed" when merging with another TUI session. See
+      // mergeBookmarks for why this is needed.
+      let baseline: LocalBookmark[] = []
+
+      // Awaited by callers so a failed write (e.g. disk full) surfaces as a
+      // thrown error instead of silently reporting success. Re-reads the
+      // file immediately before writing and merges with it, so a second TUI
+      // session saving around the same time doesn't silently clobber this
+      // session's bookmarks (or vice versa).
+      async function save() {
+        if (!bookmarkStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        const onDisk = await loadBookmarks(filePath)
+        const merged = mergeBookmarks(baseline, bookmarkStore.items, onDisk)
+        await saveBookmarks(filePath, merged)
+        baseline = merged
+        setBookmarkStore("items", merged)
+      }
+
+      loadBookmarks(filePath)
+        .then((items) => {
+          baseline = items
+          setBookmarkStore("items", items)
+        })
+        .finally(() => {
+          setBookmarkStore("ready", true)
+          if (state.pending) void save().catch(() => {})
+        })
+
+      function prune(sessionID: string) {
+        const remaining = pruneBookmarksForSession(bookmarkStore.items, sessionID)
+        if (remaining.length === bookmarkStore.items.length) return
+        setBookmarkStore("items", remaining)
+        void save().catch(() => {})
+      }
+
+      event.on("session.deleted", (evt) => {
+        prune(evt.properties.info.id)
+      })
+
+      return {
+        list() {
+          return sortBookmarks(bookmarkStore.items)
+        },
+        has(id: string) {
+          return bookmarkStore.items.some((item) => item.id === id)
+        },
+        async remove(id: string) {
+          const previous = bookmarkStore.items
+          setBookmarkStore("items", removeBookmark(bookmarkStore.items, id))
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
+        },
+        async toggle(entry: Omit<LocalBookmark, "createdAt">) {
+          const previous = bookmarkStore.items
+          const { items, result } = toggleBookmark(bookmarkStore.items, entry)
+          setBookmarkStore("items", items)
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
+          return result
+        },
+        async rename(id: string, name: string) {
+          const previous = bookmarkStore.items
+          setBookmarkStore("items", renameBookmark(bookmarkStore.items, id, name))
+          try {
+            await save()
+          } catch (error) {
+            setBookmarkStore("items", previous)
+            throw error
+          }
+        },
+      }
+    }
+
+    const bookmark = createBookmark()
 
     const mcp = {
       isEnabled(name: string) {
@@ -535,6 +776,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       agent,
       mcp,
       session,
+      bookmark,
       permission,
     }
     return result
