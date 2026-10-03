@@ -9,6 +9,7 @@ import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_AUTONAME from "./template/autoname.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -85,6 +86,13 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands["autoname"] = {
+        name: "autoname",
+        description: "summarize session with 2-5 words and propose a new title",
+        source: "command",
+        template: PROMPT_AUTONAME,
+        hints: hints(PROMPT_AUTONAME),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
