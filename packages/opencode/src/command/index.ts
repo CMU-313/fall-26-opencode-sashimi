@@ -89,7 +89,7 @@ const layer = Layer.effect(
       }
       commands["autoname"] = {
         name: "autoname",
-        description: "summarize session with 2-5 words and propose a new title",
+        description: "rename session automatically with 2-5 words summary",
         source: "command",
         template: PROMPT_AUTONAME,
         hints: hints(PROMPT_AUTONAME),
