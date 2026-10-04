@@ -74,13 +74,13 @@ describe("autoname command", () => {
     })
 
     test("Ignores non-text parts", () => {
-      const simulatedResult = {
-        parts: [{ type: "file" as const, url: "file:///tmp/test.txt" }],
-      }
+      const parts: { type: string; text?: string; url?: string }[] = [
+        { type: "file", url: "file:///tmp/test.txt" },
+      ]
       const titles: string[] = []
-      for (const part of simulatedResult.parts) {
-        if (part.type === "text" && typeof (part as any).text === "string") {
-          const match = (part as any).text.match(/RENAMED:\s*(.+)/)
+      for (const part of parts) {
+        if (part.type === "text" && typeof part.text === "string") {
+          const match = part.text.match(/RENAMED:\s*(.+)/)
           if (match && match[1]) {
             const title = match[1].trim().split("\n")[0].trim()
             if (title) titles.push(title)
