@@ -1,4 +1,7 @@
 const MAX_DESCRIPTION_LENGTH = 120
+const MAX_PATH_LENGTH = 72
+const graphemeSegmenter =
+  typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : undefined
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -20,7 +23,16 @@ const truncateText = (value: string, maxLength = MAX_DESCRIPTION_LENGTH): string
   const text = sanitizeText(value)
   if (!text) return ""
   if (text.length <= maxLength) return text
-  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
+  const limit = Math.max(0, maxLength - 1)
+  const segments = graphemeSegmenter
+    ? Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
+    : Array.from(text)
+  let result = ""
+  for (const segment of segments) {
+    if (result.length + segment.length > limit) break
+    result += segment
+  }
+  return `${result.trimEnd()}…`
 }
 
 const getString = (record: Record<string, unknown>, keys: readonly string[]): string => {
@@ -45,13 +57,18 @@ const getStringForSummary = (record: Record<string, unknown>, keys: readonly str
   return ""
 }
 
-const getNested = (record: Record<string, unknown>): Record<string, unknown> => {
-  const input = isRecord(record.input) ? record.input : {}
-  return { ...input, ...record }
-}
-
 const choosePath = (record: Record<string, unknown>): string => {
   return getString(record, ["path", "filePath", "filepath", "file", "target", "resource"]) || ""
+}
+
+const describePath = (value: string): string => {
+  const path = sanitizeText(value)
+  if (path.length <= MAX_PATH_LENGTH) return path
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  const separatorCharacter = path[separator]
+  const filename = path.slice(separator + 1)
+  if (filename.length >= MAX_PATH_LENGTH) return truncateText(path, MAX_PATH_LENGTH)
+  return `${truncateText(path.slice(0, separator), MAX_PATH_LENGTH - filename.length - separatorCharacter.length)}${separatorCharacter}${filename}`
 }
 
 const summarizeWrite = (content: string): string | undefined => {
@@ -65,13 +82,13 @@ const summarizeWrite = (content: string): string | undefined => {
 const summarizeCommand = (command: string): string => truncateText(command, 90)
 
 const describeRead = (record: Record<string, unknown>) => {
-  const path = choosePath(record)
+  const path = describePath(choosePath(record))
   if (path) return `Agent wants to read the file ${path}`
   return "Agent wants to read a file"
 }
 
 const describeWrite = (record: Record<string, unknown>) => {
-  const path = choosePath(record)
+  const path = describePath(choosePath(record))
   const content = getStringForSummary(record, ["content", "newString", "text", "body"])
   const summary = summarizeWrite(content)
   if (path && summary) return `Agent wants to write ${summary} to ${path}`
@@ -81,7 +98,7 @@ const describeWrite = (record: Record<string, unknown>) => {
 }
 
 const describeEdit = (record: Record<string, unknown>) => {
-  const path = choosePath(record)
+  const path = describePath(choosePath(record))
   if (path) return `Agent wants to edit ${path}`
   return "Agent wants to edit a file"
 }
@@ -106,7 +123,7 @@ const describePatternAction = (permission: string, record: Record<string, unknow
 }
 
 export function explainPermissionReq(permission: string, metadata: unknown): string {
-  const record = getNested(isRecord(metadata) ? metadata : {})
+  const record = isRecord(metadata) ? metadata : {}
 
   switch (permission) {
     case "read":

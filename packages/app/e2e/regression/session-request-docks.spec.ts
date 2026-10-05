@@ -119,7 +119,7 @@ test("summarizes long commands in the pending permission dock", async ({ page })
         id: "long-command-permission",
         sessionID,
         permission: "bash",
-        patterns: [],
+        patterns: [command],
         metadata: { command },
         always: [],
       },
@@ -137,6 +137,7 @@ test("summarizes long commands in the pending permission dock", async ({ page })
   expect(text).toContain("Agent wants to run: npm install long-package-name")
   expect(text).not.toMatch(/[\r\n]/)
   expect(text.length).toBeLessThanOrEqual(120)
+  await expect(permission.locator('[data-slot="permission-patterns"] code')).toHaveText(command)
   await expect(permission.getByRole("button", { name: "Deny" })).toBeVisible()
   await expect(permission.getByRole("button", { name: "Allow once" })).toBeVisible()
 })
