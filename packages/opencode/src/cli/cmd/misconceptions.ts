@@ -10,7 +10,7 @@ import { ToolJsonSchema } from "@/tool/json-schema"
 import { effectCmd, fail } from "../effect-cmd"
 
 // Assistant replies only give context for the student's side, so keep a short prefix of each.
-const ASSISTANT_TOKENS = 300
+const ASSISTANT_TOKENS = 150
 // Consecutive pieces of a long transcript share their last turns, so a question and its
 // follow-up are never split apart.
 const OVERLAP_TURNS = 2
@@ -412,6 +412,8 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
 const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, file: string, cache: string) {
   const turns = shrink(yield* Effect.promise(() => Bun.file(file).text()))
   if (!turns) return yield* Effect.fail(new Error("not a valid `opencode export` file"))
+  // A transcript where the student never wrote anything has nothing to analyze, so it costs no model call.
+  if (!turns.some((turn) => turn.role === "user")) return []
   const cached = path.join(
     cache,
     "findings",
