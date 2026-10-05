@@ -388,6 +388,9 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
           await generateObject({
             model: language,
             temperature: 0,
+            // Replies are JSON; a reply cut off at a provider's default output limit is unparseable, so ask for the
+            // model's full output allowance.
+            maxOutputTokens: resolved.limit.output,
             schema: Object.assign(Schema.toStandardSchemaV1(schema), Schema.toStandardJSONSchemaV1(schema)),
             messages: [
               // Providers whose JSON mode is `json_object` (such as DeepSeek) reject prompts that never mention
