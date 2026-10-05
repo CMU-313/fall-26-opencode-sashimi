@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer, PlatformError } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, PlatformError } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -19,6 +19,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ReadTool } from "@opencode-ai/core/tool/read"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
+import { explainPermissionReq } from "@opencode-ai/core/tool/permission-description"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -58,13 +59,17 @@ const reader = Layer.succeed(
   }),
 )
 let allow = true
+let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
 const permission = Layer.succeed(
   PermissionV2.Service,
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => {
         assertions.push(input)
-      }).pipe(Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.BlockedError({ rules: [] })))),
+      }).pipe(
+        Effect.andThen(Effect.suspend(() => afterPermission(input))),
+        Effect.andThen(allow ? Effect.void : Effect.fail(new PermissionV2.BlockedError({ rules: [] }))),
+      ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
     get: () => Effect.die("unused"),
@@ -151,6 +156,7 @@ describe("ReadTool", () => {
     readCalls.length = 0
     listCalls.length = 0
     allow = true
+    afterPermission = () => Effect.void
     resolvedType = "file"
     resolveFailure = undefined
     readResult = {
@@ -187,12 +193,46 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
+      // Tool integration with a test reader; permission UI inputs remain flat.
+      expect(assertions[0]?.metadata).toMatchObject({ path: "README.md" })
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(readCalls).toEqual([
         {
           input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
           page: { offset: undefined, limit: undefined },
         },
       ])
+    }),
+  )
+
+  // Tool integration: hold the permission assertion open and prove the real read waits for approval.
+  it.effect("pauses a read tool call until its permission request is approved", () =>
+    Effect.gen(function* () {
+      const requested = yield* Deferred.make<PermissionV2.AssertInput>()
+      const approved = yield* Deferred.make<void>()
+      afterPermission = (input) => Deferred.succeed(requested, input).pipe(Effect.andThen(Deferred.await(approved)))
+      const registry = yield* ToolRegistry.Service
+      const fiber = yield* Effect.gen(function* () {
+        return yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-read-awaiting-approval", name: "read", input: { path: "README.md" } },
+        })
+      }).pipe(Effect.forkScoped)
+
+      const request = yield* Deferred.await(requested)
+      expect(request).toMatchObject({
+        sessionID,
+        action: "read",
+        resources: ["README.md"],
+        metadata: { path: "README.md" },
+      })
+      expect(explainPermissionReq(request.action, request.metadata)).toBe("Agent wants to read the file README.md")
+      expect(readCalls).toEqual([])
+
+      yield* Deferred.succeed(approved, undefined)
+      expect(yield* Fiber.join(fiber)).toMatchObject({ type: "json" })
+      expect(readCalls).toHaveLength(1)
     }),
   )
 

@@ -210,7 +210,10 @@ const layer = Layer.effectDiscard(
                 action: name,
                 resources: [input.query],
                 save: ["*"],
-                metadata: { ...input, provider },
+                metadata: {
+                  ...input,
+                  provider,
+                },
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },

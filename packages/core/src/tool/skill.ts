@@ -77,6 +77,9 @@ const layer = Layer.effectDiscard(
                   action: name,
                   resources: [skill.name],
                   save: [skill.name],
+                  metadata: {
+                    name: input.name,
+                  },
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },

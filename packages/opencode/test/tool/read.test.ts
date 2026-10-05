@@ -215,6 +215,8 @@ describe("tool.read external_directory permission", () => {
       const read = items.find((item) => item.permission === "read")
       expect(read).toBeDefined()
       expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
+      // OpenCode tool integration: rule matching uses a relative path while prompt metadata retains the target path.
+      expect(read!.metadata).toMatchObject({ filepath: path.join(dir, "src", "secret.ts") })
     }),
   )
 

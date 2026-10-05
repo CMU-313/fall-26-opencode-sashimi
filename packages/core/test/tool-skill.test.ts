@@ -105,6 +105,8 @@ describe("SkillTool", () => {
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
               { sessionID, action: "skill", resources: ["effect"], save: ["effect"] },
             ])
+            // Tool integration with a stub skill service; the selected name is passed as flat metadata.
+            expect(assertions[0]?.metadata).toEqual({ name: "effect" })
             expect(
               yield* executeTool(registry, {
                 sessionID,

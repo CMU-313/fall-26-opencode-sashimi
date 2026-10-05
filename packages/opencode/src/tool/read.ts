@@ -256,7 +256,7 @@ export const ReadTool = Tool.define<
         permission: "read",
         patterns: [path.relative(instance.worktree, filepath)],
         always: ["*"],
-        metadata: {},
+        metadata: { filepath },
       })
 
       if (!stat) return yield* miss(filepath)

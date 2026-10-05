@@ -173,6 +173,9 @@ describe("BashTool", () => {
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
             })
             expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])
+            // Tool integration with a captured permission service; command metadata stays flat.
+            expect(assertions[0]?.metadata).toMatchObject({ command: "pwd" })
+            expect(assertions[0]?.metadata).not.toHaveProperty("input")
           }),
         )
       },
