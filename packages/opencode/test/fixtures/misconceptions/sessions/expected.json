@@ -1,0 +1,49 @@
+{
+  "student-01.json": [
+    { "description": "Believes git pull only downloads changes without merging them", "depth": "moderate" },
+    { "description": "Believes 100% test coverage means the code has no bugs", "depth": "severe" }
+  ],
+  "student-02.json": [
+    { "description": "Believes rebasing and force-pushing a shared branch is harmless", "depth": "severe" },
+    { "description": "Resolves a merge conflict by deleting the teammate's side, thinking git is buggy", "depth": "moderate" }
+  ],
+  "student-03.json": [
+    { "description": "Thinks adding an already-committed file to .gitignore untracks it", "depth": "mild" }
+  ],
+  "student-04.json": [
+    { "description": "Believes 100% test coverage means the code has no bugs", "depth": "moderate" },
+    { "description": "Thinks async functions run in parallel on separate threads and forgets to await", "depth": "severe" }
+  ],
+  "student-05.json": [
+    { "description": "Concludes CI is broken because tests pass locally", "depth": "severe" },
+    { "description": "Thinks a flaky test should just be retried until it passes", "depth": "moderate" }
+  ],
+  "student-06.json": [
+    { "description": "Cannot tell unit from integration tests and mocks every dependency in an integration test", "depth": "moderate" },
+    { "description": "Believes git pull only downloads changes without merging them", "depth": "mild" }
+  ],
+  "student-07.json": [
+    { "description": "Believes TypeScript types are checked at runtime and reject bad API input", "depth": "severe" },
+    { "description": "Thinks a clean linter run means there are no bugs", "depth": "mild" }
+  ],
+  "student-08.json": [
+    { "description": "Writes user stories as implementation tasks, confusing requirements with design", "depth": "moderate" },
+    { "description": "Believes 100% test coverage means the code has no bugs", "depth": "mild" }
+  ],
+  "student-09.json": [
+    { "description": "Forgets to await and believes async/await runs code on separate threads", "depth": "moderate" },
+    { "description": "Force-pushes a rebased shared branch thinking it is harmless", "depth": "moderate" }
+  ],
+  "student-10.json": [
+    { "description": "Assumes a major version bump is backward compatible under semantic versioning", "depth": "moderate" },
+    { "description": "Thinks a caret range like ^2.1.0 pins the exact version", "depth": "mild" }
+  ],
+  "student-11.json": [
+    { "description": "Resolves merge conflicts by taking 'ours' everywhere, believing conflicts mean someone made a mistake", "depth": "severe" },
+    { "description": "Retries a flaky test until it passes", "depth": "mild" }
+  ],
+  "student-12.json": [
+    { "description": "Thinks CI runs on their own laptop", "depth": "moderate" },
+    { "description": "Thinks a red CI check can be ignored when tests pass locally", "depth": "severe" }
+  ]
+}

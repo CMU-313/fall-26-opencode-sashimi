@@ -1,0 +1,251 @@
+{
+  "info": {
+    "id": "ses_05",
+    "slug": "ci-broken-flaky-test",
+    "projectID": "prj_313",
+    "directory": "/home/student/nodebb",
+    "title": "CI keeps failing but works on my machine",
+    "version": "1.14.0",
+    "time": { "created": 1758710000000, "updated": 1758710090000 }
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_01",
+        "sessionID": "ses_05",
+        "role": "user",
+        "time": { "created": 1758710000000 },
+        "agent": "build",
+        "model": { "providerID": "anthropic", "modelID": "claude-sonnet-5" }
+      },
+      "parts": [
+        { "id": "prt_01a", "sessionID": "ses_05", "messageID": "msg_01", "type": "text", "text": "ok this is dumb, my pr passes all tests when i run `bun test` locally but the github actions check is red. the ci runner must just be broken, can i merge anyway since it works on my machine" }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_02",
+        "sessionID": "ses_05",
+        "role": "assistant",
+        "time": { "created": 1758710001000, "completed": 1758710015000 },
+        "parentID": "msg_01",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": { "cwd": "/home/student/nodebb", "root": "/home/student/nodebb" },
+        "cost": 0.02,
+        "tokens": { "input": 1500, "output": 400, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+      },
+      "parts": [
+        { "id": "prt_02a", "sessionID": "ses_05", "messageID": "msg_02", "type": "step-start" },
+        { "id": "prt_02b", "sessionID": "ses_05", "messageID": "msg_02", "type": "reasoning", "text": "Before assuming the runner is broken, check the actual CI log and the working tree for anything not committed.", "time": { "start": 1758710001000, "end": 1758710002000 } },
+        {
+          "id": "prt_02c", "sessionID": "ses_05", "messageID": "msg_02", "type": "tool", "callID": "call_1", "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": { "command": "gh pr checks --json name,state,link | head -20", "description": "Check PR CI status" },
+            "output": "test (unit)\tfail\thttps://github.com/team/nodebb/actions/runs/1234\nlint\tpass\thttps://github.com/team/nodebb/actions/runs/1234",
+            "title": "Check PR CI status",
+            "metadata": {},
+            "time": { "start": 1758710002000, "end": 1758710003000 }
+          }
+        },
+        {
+          "id": "prt_02d", "sessionID": "ses_05", "messageID": "msg_02", "type": "tool", "callID": "call_2", "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": { "command": "git status --short", "description": "Check working tree state" },
+            "output": "?? test/helpers/seed-user.ts",
+            "title": "Check working tree state",
+            "metadata": {},
+            "time": { "start": 1758710003000, "end": 1758710004000 }
+          }
+        },
+        { "id": "prt_02e", "sessionID": "ses_05", "messageID": "msg_02", "type": "text", "text": "It's probably not the runner. `git status` shows `test/helpers/seed-user.ts` is untracked, so CI never sees it even though it's on your disk. If your new test imports that helper, it'll fail in a clean checkout but pass locally. Can you check if your test imports it?" },
+        { "id": "prt_02f", "sessionID": "ses_05", "messageID": "msg_02", "type": "step-finish", "reason": "stop", "cost": 0.02, "tokens": { "input": 1500, "output": 400, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_03",
+        "sessionID": "ses_05",
+        "role": "user",
+        "time": { "created": 1758710020000 },
+        "agent": "build",
+        "model": { "providerID": "anthropic", "modelID": "claude-sonnet-5" }
+      },
+      "parts": [
+        { "id": "prt_03a", "sessionID": "ses_05", "messageID": "msg_03", "type": "text", "text": "yeah it imports that file but its just a test helper, that shouldnt matter for whether ci is broken. i still think the runner is flaky, ive seen it fail for no reason before. can we just merge and deal with it later, we're already behind on the deadline" }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_04",
+        "sessionID": "ses_05",
+        "role": "assistant",
+        "time": { "created": 1758710021000, "completed": 1758710035000 },
+        "parentID": "msg_03",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": { "cwd": "/home/student/nodebb", "root": "/home/student/nodebb" },
+        "cost": 0.02,
+        "tokens": { "input": 1600, "output": 420, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+      },
+      "parts": [
+        { "id": "prt_04a", "sessionID": "ses_05", "messageID": "msg_04", "type": "step-start" },
+        {
+          "id": "prt_04b", "sessionID": "ses_05", "messageID": "msg_04", "type": "tool", "callID": "call_3", "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": { "command": "git diff --stat HEAD", "description": "Show diff of tracked files" },
+            "output": "test/posts/pin.test.ts | 4 +-\n1 file changed, 3 insertions(+), 1 deletion(-)",
+            "title": "Show diff of tracked files",
+            "metadata": {},
+            "time": { "start": 1758710022000, "end": 1758710023000 }
+          }
+        },
+        { "id": "prt_04c", "sessionID": "ses_05", "messageID": "msg_04", "type": "text", "text": "It's not flaky here, it's deterministic: `pin.test.ts` imports `seed-user.ts`, that file was never committed, so on a fresh clone (which is what CI does) the import fails with a module-not-found error, every time. That's not the runner being broken, it's a real bug in your PR. Merging now would break `main` for everyone else too. Run `git add test/helpers/seed-user.ts` and commit it, then push - I'd bet the check goes green." },
+        { "id": "prt_04d", "sessionID": "ses_05", "messageID": "msg_04", "type": "step-finish", "reason": "stop", "cost": 0.02, "tokens": { "input": 1600, "output": 420, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_05",
+        "sessionID": "ses_05",
+        "role": "user",
+        "time": { "created": 1758710040000 },
+        "agent": "build",
+        "model": { "providerID": "anthropic", "modelID": "claude-sonnet-5" }
+      },
+      "parts": [
+        { "id": "prt_05a", "sessionID": "ses_05", "messageID": "msg_05", "type": "text", "text": "oh damn, committed it and pushed, that check did turn green. ok separate issue, theres this other test `topics/merge.test.ts` that fails maybe 1 in 5 runs on ci. can you just add a retry so it reruns until it passes? that way the check stays green" }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_06",
+        "sessionID": "ses_05",
+        "role": "assistant",
+        "time": { "created": 1758710041000, "completed": 1758710055000 },
+        "parentID": "msg_05",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": { "cwd": "/home/student/nodebb", "root": "/home/student/nodebb" },
+        "cost": 0.02,
+        "tokens": { "input": 1550, "output": 410, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+      },
+      "parts": [
+        { "id": "prt_06a", "sessionID": "ses_05", "messageID": "msg_06", "type": "step-start" },
+        { "id": "prt_06b", "sessionID": "ses_05", "messageID": "msg_06", "type": "reasoning", "text": "Look at the flaky test before reaching for a retry wrapper - it likely races on an async merge.", "time": { "start": 1758710041000, "end": 1758710042000 } },
+        {
+          "id": "prt_06c", "sessionID": "ses_05", "messageID": "msg_06", "type": "tool", "callID": "call_4", "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": { "filePath": "test/topics/merge.test.ts" },
+            "output": "it('merges two topics', async () => {\n  mergeTopics(1, 2)\n  const result = await Topics.get(1)\n  expect(result.tid).toBe(1)\n})",
+            "title": "test/topics/merge.test.ts",
+            "metadata": {},
+            "time": { "start": 1758710042000, "end": 1758710043000 }
+          }
+        },
+        { "id": "prt_06d", "sessionID": "ses_05", "messageID": "msg_06", "type": "text", "text": "Retrying until green would just mask the bug instead of fixing it, and it'd get slower and flakier over time as more tests do this. Here `mergeTopics(1, 2)` isn't awaited, so the assertion sometimes runs before the merge finishes writing to the db - that's the real race. Add `await` in front of it and it should stop being flaky." },
+        { "id": "prt_06e", "sessionID": "ses_05", "messageID": "msg_06", "type": "step-finish", "reason": "stop", "cost": 0.02, "tokens": { "input": 1550, "output": 410, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_07",
+        "sessionID": "ses_05",
+        "role": "user",
+        "time": { "created": 1758710060000 },
+        "agent": "build",
+        "model": { "providerID": "anthropic", "modelID": "claude-sonnet-5" }
+      },
+      "parts": [
+        { "id": "prt_07a", "sessionID": "ses_05", "messageID": "msg_07", "type": "text", "text": "i mean sure but even with a real bug, if it eventually passes on retry isnt that basically fine? we just need the green checkmark to merge, nobody looks past that" }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_08",
+        "sessionID": "ses_05",
+        "role": "assistant",
+        "time": { "created": 1758710061000, "completed": 1758710080000 },
+        "parentID": "msg_07",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": { "cwd": "/home/student/nodebb", "root": "/home/student/nodebb" },
+        "cost": 0.03,
+        "tokens": { "input": 1700, "output": 450, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+      },
+      "parts": [
+        { "id": "prt_08a", "sessionID": "ses_05", "messageID": "msg_08", "type": "step-start" },
+        {
+          "id": "prt_08b", "sessionID": "ses_05", "messageID": "msg_08", "type": "tool", "callID": "call_5", "tool": "edit",
+          "state": {
+            "status": "completed",
+            "input": { "filePath": "test/topics/merge.test.ts", "oldString": "mergeTopics(1, 2)", "newString": "await mergeTopics(1, 2)" },
+            "output": "Edited test/topics/merge.test.ts",
+            "title": "Add missing await",
+            "metadata": {},
+            "time": { "start": 1758710062000, "end": 1758710063000 }
+          }
+        },
+        {
+          "id": "prt_08c", "sessionID": "ses_05", "messageID": "msg_08", "type": "tool", "callID": "call_6", "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": { "command": "for i in 1 2 3 4 5; do bun test test/topics/merge.test.ts || echo FAILED; done", "description": "Run the test 5 times to check for flakiness" },
+            "output": "1 pass, 0 fail\n1 pass, 0 fail\n1 pass, 0 fail\n1 pass, 0 fail\n1 pass, 0 fail",
+            "title": "Run the test 5 times",
+            "metadata": {},
+            "time": { "start": 1758710063000, "end": 1758710070000 }
+          }
+        },
+        { "id": "prt_08d", "sessionID": "ses_05", "messageID": "msg_08", "type": "text", "text": "The green checkmark is supposed to mean \"this behavior is verified,\" not \"we retried until luck was on our side.\" A flaky test that passes on retry can still be hiding a real race condition that shows up for users, just less often than in CI. With the `await` added it passed 5/5 locally with no retries needed - that's the fix, not a retry loop." },
+        { "id": "prt_08e", "sessionID": "ses_05", "messageID": "msg_08", "type": "step-finish", "reason": "stop", "cost": 0.03, "tokens": { "input": 1700, "output": 450, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_09",
+        "sessionID": "ses_05",
+        "role": "user",
+        "time": { "created": 1758710085000 },
+        "agent": "build",
+        "model": { "providerID": "anthropic", "modelID": "claude-sonnet-5" }
+      },
+      "parts": [
+        { "id": "prt_09a", "sessionID": "ses_05", "messageID": "msg_09", "type": "text", "text": "ok that makes sense actually, i'll fix the root cause instead of retrying. pushing now" }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_10",
+        "sessionID": "ses_05",
+        "role": "assistant",
+        "time": { "created": 1758710086000, "completed": 1758710090000 },
+        "parentID": "msg_09",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": { "cwd": "/home/student/nodebb", "root": "/home/student/nodebb" },
+        "cost": 0.005,
+        "tokens": { "input": 400, "output": 80, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+      },
+      "parts": [
+        { "id": "prt_10a", "sessionID": "ses_05", "messageID": "msg_10", "type": "step-start" },
+        { "id": "prt_10b", "sessionID": "ses_05", "messageID": "msg_10", "type": "text", "text": "Sounds good. Once it's pushed, check the Actions tab to confirm the real run is green too, not just your local loop." },
+        { "id": "prt_10c", "sessionID": "ses_05", "messageID": "msg_10", "type": "step-finish", "reason": "stop", "cost": 0.005, "tokens": { "input": 400, "output": 80, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }
+      ]
+    }
+  ]
+}
