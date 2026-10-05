@@ -47,4 +47,47 @@ Looking at the acceptance criterion, we can see it is all tested
 - Edge cases that were found were also covered, such as trying to remove a bookmark that doesn't exist, renaming a bookmark to blank or whitespace, pruning a session with no bookmarks, pruning a session with bookmarks, having a corrupted or missing bookmark file, and two sessions saving different bookmarks around the same time.
 - Save/load and corruption recovery used to only be manually verified. They're now also automated against a real temporary file (not mocks) in `bookmark-persistence.test.ts`, the file gets renamed and backed up to `bookmark.json.corrupt-<timestamp>`, not just that the error gets classified correctly. That same file also has an integration test simulating two sessions writing to the same `bookmark.json`, proving `mergeBookmarks` resolves the conflict correctly against real file I/O. `bookmark-e2e.test.ts` goes further and proves this same thing through the actual running app, two real sessions with independent reactive state.
 - I still have manual tests for making the state directory unwritable and confirming a failed save produces an error instead of failing silently (I manually tested this and got an error notification as expected), and confirming the keybinds are correctly wired to the right commands.
-- Combined, all the acceptance criterion has both has a unit test proving the logic is correct, and a manual test proving it works with the UI and file system. The end-to-end tests added target two specific things: the session.deleted cleanup behavior (a real event firing through the real event system, including a negative case for an unrelated session) and the two-TUI merge fix (two real, independently reactive sessions sharing one file). However there is still a gap because there is no automated component level coverage for the bookmark list viewing and bookmark renaming, and no automated tests for the keybinds. The manual testing is my current substitute for that, and a `testRender` based test would be the next natural step to close that gap. 
+- Combined, all the acceptance criterion has both has a unit test proving the logic is correct, and a manual test proving it works with the UI and file system. The end-to-end tests added target two specific things: the session.deleted cleanup behavior (a real event firing through the real event system, including a negative case for an unrelated session) and the two-TUI merge fix (two real, independently reactive sessions sharing one file). However there is still a gap because there is no automated component level coverage for the bookmark list viewing and bookmark renaming, and no automated tests for the keybinds. The manual testing is my current substitute for that, and a `testRender` based test would be the next natural step to close that gap.
+
+## Permission action descriptions (inseok)
+### How to use the feature
+- This feature is available in the OpenCode app interface, not in the TUI permission prompt.
+- When a tool call requires permission, OpenCode pauses the call and shows an approval dock with a short description of the requested action next to the permission controls.
+- The description uses the permission request's existing metadata. For example, a read request can say `Agent wants to read the file src/components/Button.tsx`, and a write request can summarize content as a line or character count instead of showing the content.
+- Long commands and search patterns are shortened to keep the description readable. Long paths are bounded while retaining the filename when possible; truncation avoids splitting grapheme clusters such as emoji.
+- The permission request's resource patterns remain available separately in the dock, so a shortened command description does not replace the full command/resource shown there.
+- Descriptions are formatted locally and deterministically; no LLM call is made to explain a permission request.
+
+### How to manually test it
+- Follow these steps in the OpenCode app interface; the TUI does not display these action descriptions.
+- Configure a tool such as `read`, `edit`, or `bash` to require approval, then start a session.
+- Ask the agent to read a file with a recognizable path. Confirm the permission dock names the file and shows the approval controls before the read completes.
+- Reject the request and confirm the tool does not complete. Repeat and approve once; confirm the tool proceeds.
+- Ask the agent to write several lines or edit a file. Confirm the description summarizes the content rather than dumping it.
+- Trigger a long bash command. Confirm the one-line description is shortened and the full command remains available in the permission resources list.
+- If possible, test a long path and a path containing emoji or combined characters. Confirm the description remains bounded, retains the filename where possible, and does not show a broken character.
+
+### Written tests for this feature
+#### Location of tests
+- `packages/core/test/tool-permission-description.test.ts` contains unit tests for formatting descriptions from flat permission metadata, including read/write/edit, apply-patch, shell commands, search and web actions, todo and skill actions, missing values, long paths, and grapheme-safe truncation.
+- `packages/core/test/tool-apply-patch.test.ts`, `tool-bash.test.ts`, `tool-edit.test.ts`, `tool-read.test.ts`, `tool-skill.test.ts`, `tool-todowrite.test.ts`, `tool-webfetch.test.ts`, `tool-websearch.test.ts`, and `tool-write.test.ts` assert that tool integrations pass the expected flat metadata to permission requests.
+- `packages/core/test/tool-search-permission-metadata.test.ts` executes glob and grep through the tool registry and checks their permission metadata.
+- `packages/core/test/tool-read.test.ts` also holds a real ReadTool registry call at the permission boundary, verifies no read happens before approval, checks the captured request produces the expected description, then releases the call.
+- `packages/opencode/test/tool/read.test.ts` checks the V1 read permission uses a worktree-relative rule pattern while retaining the full target path in metadata.
+- `packages/app/e2e/regression/session-request-docks.spec.ts` contains Playwright browser tests for a path-specific description, permission controls, approval reply, and long-command summary. The tests use mocked permission requests rather than a live OpenCode server.
+
+#### What's being tested
+- Read descriptions include the requested path, and long paths stay bounded while retaining their filename when possible.
+- Write and edit descriptions identify the target without exposing full content; write content is summarized by line or character count.
+- Apply-patch requests include a target path so the edit description can identify a file.
+- Bash, glob, grep, webfetch, and websearch descriptions include useful action context and safely truncate long values.
+- Skill, todo, missing-argument, unknown-tool, control-character, and multiline cases produce readable fallback descriptions.
+- Tool integration tests verify permission metadata is flat and avoids duplicate nested `input` payloads.
+- The ReadTool permission test verifies the tool call waits at the permission boundary; the browser tests verify the dock renders the description beside the controls and sends the approval reply.
+- The long-command browser test checks that the hint is a single bounded line while the full command remains available as a permission resource.
+
+#### Why these are sufficient
+- Pure formatter tests cover the description rules without requiring UI or filesystem setup, while tool-registry tests verify real built-in tools supply the metadata those rules consume.
+- The ReadTool integration test exercises an actual registered tool call and proves it does not read before the permission assertion is released.
+- The Playwright tests exercise the rendered dock and approval interaction in a browser, but use a mocked API request. They do not currently run one live tool call all the way through the server and browser UI in a single test.
+- Manual testing remains useful for verifying real provider/tool behavior across every tool and checking how long resource patterns are presented in the running app.
