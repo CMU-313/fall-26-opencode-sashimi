@@ -22,7 +22,7 @@ const PIECE_TOKENS = 60_000
 const PROMPT_TOKENS = 2_000
 const CONCURRENCY = 4
 // Bump when the extraction prompt or schema changes so cached findings are recomputed.
-const CACHE_VERSION = 2
+const CACHE_VERSION = 3
 const TRIM_MARKER = " …[trimmed]"
 
 export const DEPTH_WEIGHT = { mild: 1, moderate: 2, severe: 3 }
@@ -43,12 +43,15 @@ export type Extracted = typeof Extracted.Type
 const Extraction = Schema.Struct({ misconceptions: Schema.Array(Extracted) })
 
 // `messageIndex` is the cited student message's position in the export's `messages` array, when the model
-// cited one that exists, so the full message can be looked up in the transcript file.
+// cited one that exists, so the full message can be looked up in the transcript file. After verification,
+// `cited` lists every student message showing the misconception and `acted` whether the student acted on it.
 const Finding = Schema.Struct({
   description: Schema.String,
   evidence: Schema.String,
   depth: Depth,
   messageIndex: Schema.optional(Schema.Number),
+  cited: Schema.optional(Schema.Array(Schema.Number)),
+  acted: Schema.optional(Schema.Boolean),
 })
 export type Finding = typeof Finding.Type
 
@@ -67,6 +70,11 @@ const Category = Schema.Struct({
 export type Category = typeof Category.Type
 
 const Categories = Schema.Struct({ categories: Schema.Array(Category) })
+
+// What the verify pass returns: which candidates survive, where each one shows up, and whether it was acted on.
+const Verified = Schema.Struct({
+  kept: Schema.Array(Schema.Struct({ id: Schema.Number, cited: Schema.Array(Schema.Number), acted: Schema.Boolean })),
+})
 
 // Only the fields the analysis reads; everything else in an `opencode export` file is ignored.
 const ExportFile = Schema.Struct({
@@ -100,6 +108,14 @@ For each one give:
 Messages listed as earlier context were already reviewed; only report misconceptions shown in the messages to review.
 Do not group, rank, or merge items. Return an empty list if there are none.`
 
+const VERIFY_PROMPT = `You check candidate misconceptions against the student conversation they were taken from. Student messages are numbered in brackets.
+Keep a candidate only if a student message shows the student holding or acting on the wrong belief about software engineering course material. A question on its own, or confusion about operating the AI assistant, is not a misconception.
+For each kept candidate give:
+- id: the candidate's number.
+- cited: the bracket numbers of every student message where the student states, repeats or relies on this misconception.
+- acted: true if the student wrote code, ran a command, pushed, or made a decision based on it.
+Return only the kept candidates.`
+
 const OUTLINE_PROMPT = `You read course material for a software engineering course and produce an outline of its topics.
 For each topic give its name, its importance, and a one-sentence reason.
 importance: core = the course is built on it (appears in learning objectives, spans multiple weeks, later topics or graded projects depend on it); supporting = taught and used but not central; peripheral = mentioned briefly.
@@ -131,6 +147,11 @@ export const MisconceptionsCommand = effectCmd({
       .option("json", {
         describe: "print results as JSON",
         type: "boolean",
+      })
+      .option("verify", {
+        describe: "check each candidate misconception against its transcript in a second model call (--no-verify to skip)",
+        type: "boolean",
+        default: true,
       }),
   handler: Effect.fn("Cli.misconceptions")(function* (args) {
     const dir = path.resolve(args.dir)
@@ -144,7 +165,7 @@ export const MisconceptionsCommand = effectCmd({
     const results = yield* Effect.forEach(
       files.toSorted(),
       (file, i) =>
-        analyze(llm, path.join(dir, file), cache).pipe(
+        analyze(llm, path.join(dir, file), cache, args.verify).pipe(
           Effect.map((findings) => ({ file, findings, error: undefined })),
           Effect.catchCause((cause) => Effect.succeed({ file, findings: [], error: Cause.pretty(cause) })),
           Effect.tap(() => Effect.sync(() => process.stderr.write(`[${i + 1}/${files.length}] ${file}${EOL}`))),
@@ -172,7 +193,16 @@ export const MisconceptionsCommand = effectCmd({
 
     if (args.json) {
       process.stdout.write(
-        JSON.stringify({ transcripts: results.length - skipped.length, rows, skipped }, null, 2) + EOL,
+        JSON.stringify(
+          {
+            transcripts: results.length - skipped.length,
+            rows,
+            skipped,
+            findings: results.filter((result) => result.error === undefined).map((result) => ({ file: result.file, misconceptions: result.findings })),
+          },
+          null,
+          2,
+        ) + EOL,
       )
       return
     }
@@ -420,7 +450,7 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
   }
 })
 
-const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, file: string, cache: string) {
+const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, file: string, cache: string, verify: boolean) {
   const turns = shrink(yield* Effect.promise(() => Bun.file(file).text()))
   if (!turns) return yield* Effect.fail(new Error("not a valid `opencode export` file"))
   // A transcript where the student never wrote anything has nothing to analyze, so it costs no model call.
@@ -428,7 +458,7 @@ const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, fil
   const cached = path.join(
     cache,
     "findings",
-    `${Bun.hash(JSON.stringify([CACHE_VERSION, llm.key, turns])).toString(16)}.json`,
+    `${Bun.hash(JSON.stringify([CACHE_VERSION, llm.key, verify, turns])).toString(16)}.json`,
   )
   const stored = decodeFindings(yield* Effect.promise(() => Bun.file(cached).text().catch(() => "")))
   if (Option.isSome(stored)) return stored.value.misconceptions
@@ -438,10 +468,65 @@ const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, fil
       .ask(Extraction, EXTRACT_PROMPT, render(piece))
       .pipe(Effect.map((result) => result.misconceptions.map((item) => locate(item, piece)))),
   )
-  const misconceptions = dedupe(found.flat())
+  const candidates = dedupe(found.flat())
+  const misconceptions = verify && candidates.length ? yield* check(llm, turns, candidates) : candidates
   yield* Effect.promise(() => Bun.write(cached, JSON.stringify({ misconceptions }, null, 2)))
   return misconceptions
 })
+
+// Second pass over one transcript: drop candidates the transcript does not support and ground each survivor's
+// severity in what the student actually did, instead of the extraction model's guess.
+const check = Effect.fn("Cli.misconceptions.check")(function* (llm: Llm, turns: readonly Turn[], candidates: readonly Finding[]) {
+  const transcript = split(turns, llm.budget).map(render).join("\n\n")
+  const list = candidates.map((item, id) => `${id}. ${item.description} (quote: "${item.evidence}")`).join("\n")
+  const result = yield* llm.ask(Verified, VERIFY_PROMPT, `${transcript}\n\nCandidates:\n${list}`)
+  return confirm(candidates, result.kept, turns)
+})
+
+/**
+ * Apply a verify reply to the candidates: keep each candidate the reply names (first mention wins), record the student
+ * messages it cites as export positions, and set depth from the evidence.
+ */
+export function confirm(
+  candidates: readonly Finding[],
+  kept: readonly { id: number; cited: readonly number[]; acted: boolean }[],
+  turns: readonly Turn[],
+): Finding[] {
+  const students = turns.filter((turn) => turn.role === "user").map((turn) => turn.index)
+  return kept
+    .filter((item, i, all) => Number.isInteger(item.id) && item.id >= 0 && item.id < candidates.length && all.findIndex((other) => other.id === item.id) === i)
+    .map((item) => {
+      const candidate = candidates[item.id]
+      const cited = [...new Set([...(candidate.messageIndex === undefined ? [] : [candidate.messageIndex]), ...item.cited.map((n) => n - 1)])]
+        .filter((index) => students.includes(index))
+        .toSorted((a, b) => a - b)
+      return {
+        ...candidate,
+        messageIndex: cited[0] ?? candidate.messageIndex,
+        cited,
+        acted: item.acted,
+        depth: severity({ cited, acted: item.acted, depth: candidate.depth, turns }),
+      }
+    })
+}
+
+/**
+ * Severity from evidence: severe when the student acted on the misconception or repeated it after the assistant had
+ * replied; mild when it was shown once and the extraction model called it a brief slip; moderate otherwise.
+ */
+export function severity(input: { cited: readonly number[]; acted: boolean; depth: Finding["depth"]; turns: readonly Turn[] }) {
+  if (input.acted) return "severe"
+  const first = input.cited[0]
+  const last = input.cited.at(-1)
+  const repeated =
+    input.cited.length >= 2 &&
+    first !== undefined &&
+    last !== undefined &&
+    input.turns.some((turn) => turn.role === "assistant" && turn.index > first && turn.index < last)
+  if (repeated) return "severe"
+  if (input.cited.length <= 1 && input.depth === "mild") return "mild"
+  return "moderate"
+}
 
 const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, course: string, cache: string) {
   // Saved outlines are reused as-is so a TA can correct topic importance by editing the file.
