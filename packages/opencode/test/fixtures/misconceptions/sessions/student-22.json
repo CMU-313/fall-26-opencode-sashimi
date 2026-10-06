@@ -1,0 +1,533 @@
+{
+  "info": {
+    "id": "ses_22",
+    "slug": "fetchposts-promise-weirdness",
+    "projectID": "prj_313",
+    "directory": "/home/student/nodebb",
+    "title": "fetchPosts prints a Promise",
+    "version": "1.14.0",
+    "time": {
+      "created": 1758910000000,
+      "updated": 1758910060000
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_01",
+        "sessionID": "ses_22",
+        "role": "user",
+        "time": {
+          "created": 1758910000000
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-5"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_01a",
+          "sessionID": "ses_22",
+          "messageID": "msg_01",
+          "type": "text",
+          "text": "ran fetchPosts, console.log shows [object Promise]"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_02",
+        "sessionID": "ses_22",
+        "role": "assistant",
+        "time": {
+          "created": 1758910002000,
+          "completed": 1758910014000
+        },
+        "parentID": "msg_01",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/home/student/nodebb",
+          "root": "/home/student/nodebb"
+        },
+        "cost": 0.02,
+        "tokens": {
+          "input": 1400,
+          "output": 380,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_02a",
+          "sessionID": "ses_22",
+          "messageID": "msg_02",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_02b",
+          "sessionID": "ses_22",
+          "messageID": "msg_02",
+          "type": "tool",
+          "callID": "call_1",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "src/posts/fetch.ts"
+            },
+            "output": "export async function fetchPosts(uid) {\n  return db.posts.findByUid(uid)\n}\n\nconsole.log(fetchPosts(uid))",
+            "title": "Read src/posts/fetch.ts",
+            "metadata": {},
+            "time": {
+              "start": 1758910002000,
+              "end": 1758910003000
+            }
+          }
+        },
+        {
+          "id": "prt_02c",
+          "sessionID": "ses_22",
+          "messageID": "msg_02",
+          "type": "text",
+          "text": "That's because `fetchPosts` is an `async` function, so calling it returns a Promise immediately -- the actual data isn't ready yet when you log it. `async` functions still run on the same thread; they don't hand work off to another thread, they just let other code run while they're waiting. To get the resolved value, you need `await fetchPosts()` (inside another `async` function) instead of logging the call directly."
+        },
+        {
+          "id": "prt_02d",
+          "sessionID": "ses_22",
+          "messageID": "msg_02",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.02,
+          "tokens": {
+            "input": 1400,
+            "output": 380,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_03",
+        "sessionID": "ses_22",
+        "role": "user",
+        "time": {
+          "created": 1758910015000
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-5"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_03a",
+          "sessionID": "ses_22",
+          "messageID": "msg_03",
+          "type": "text",
+          "text": "oh ok added await, rerunning"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_04",
+        "sessionID": "ses_22",
+        "role": "assistant",
+        "time": {
+          "created": 1758910017000,
+          "completed": 1758910022000
+        },
+        "parentID": "msg_03",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/home/student/nodebb",
+          "root": "/home/student/nodebb"
+        },
+        "cost": 0.01,
+        "tokens": {
+          "input": 700,
+          "output": 150,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_04a",
+          "sessionID": "ses_22",
+          "messageID": "msg_04",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_04b",
+          "sessionID": "ses_22",
+          "messageID": "msg_04",
+          "type": "tool",
+          "callID": "call_1",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "bun run src/posts/fetch.ts",
+              "description": "Rerun the fetch script"
+            },
+            "output": "[ { id: 1, title: 'welcome' }, { id: 2, title: 'rules' } ]",
+            "title": "Rerun the fetch script",
+            "metadata": {},
+            "time": {
+              "start": 1758910017000,
+              "end": 1758910018000
+            }
+          }
+        },
+        {
+          "id": "prt_04c",
+          "sessionID": "ses_22",
+          "messageID": "msg_04",
+          "type": "text",
+          "text": "That should show the actual posts array now instead of the Promise wrapper."
+        },
+        {
+          "id": "prt_04d",
+          "sessionID": "ses_22",
+          "messageID": "msg_04",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.01,
+          "tokens": {
+            "input": 700,
+            "output": 150,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_05",
+        "sessionID": "ses_22",
+        "role": "user",
+        "time": {
+          "created": 1758910023000
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-5"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_05a",
+          "sessionID": "ses_22",
+          "messageID": "msg_05",
+          "type": "text",
+          "text": "now this other one, same error again"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_06",
+        "sessionID": "ses_22",
+        "role": "assistant",
+        "time": {
+          "created": 1758910025000,
+          "completed": 1758910037000
+        },
+        "parentID": "msg_05",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/home/student/nodebb",
+          "root": "/home/student/nodebb"
+        },
+        "cost": 0.02,
+        "tokens": {
+          "input": 1400,
+          "output": 380,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_06a",
+          "sessionID": "ses_22",
+          "messageID": "msg_06",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_06b",
+          "sessionID": "ses_22",
+          "messageID": "msg_06",
+          "type": "tool",
+          "callID": "call_1",
+          "tool": "grep",
+          "state": {
+            "status": "completed",
+            "input": {
+              "pattern": "fetchComments\\(",
+              "path": "src/posts"
+            },
+            "output": "src/posts/render.ts:14:  const comments = fetchComments(postId)",
+            "title": "Find other un-awaited calls",
+            "metadata": {},
+            "time": {
+              "start": 1758910025000,
+              "end": 1758910026000
+            }
+          }
+        },
+        {
+          "id": "prt_06c",
+          "sessionID": "ses_22",
+          "messageID": "msg_06",
+          "type": "text",
+          "text": "Same thing here -- `fetchComments` is also `async`, so `fetchComments(postId)` alone gives you the Promise, not the comments. This isn't a different bug, it's the same pattern: any call to an `async` function needs `await` in front of it to get the resolved value, since the function still runs on the same thread and just returns a placeholder until it finishes."
+        },
+        {
+          "id": "prt_06d",
+          "sessionID": "ses_22",
+          "messageID": "msg_06",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.02,
+          "tokens": {
+            "input": 1400,
+            "output": 380,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_07",
+        "sessionID": "ses_22",
+        "role": "user",
+        "time": {
+          "created": 1758910038000
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-5"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_07a",
+          "sessionID": "ses_22",
+          "messageID": "msg_07",
+          "type": "text",
+          "text": "but doesn't it run on another thread tho"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_08",
+        "sessionID": "ses_22",
+        "role": "assistant",
+        "time": {
+          "created": 1758910040000,
+          "completed": 1758910052000
+        },
+        "parentID": "msg_07",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/home/student/nodebb",
+          "root": "/home/student/nodebb"
+        },
+        "cost": 0.02,
+        "tokens": {
+          "input": 1400,
+          "output": 380,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_08a",
+          "sessionID": "ses_22",
+          "messageID": "msg_08",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_08b",
+          "sessionID": "ses_22",
+          "messageID": "msg_08",
+          "type": "text",
+          "text": "No -- JavaScript's event loop is single-threaded. `async`/`await` doesn't spawn a thread; it's syntax for pausing a function at an `await` and letting other code run in the meantime, then resuming once the Promise settles. There's no second thread doing the work in parallel -- that's why forgetting `await` doesn't just make things slower, it hands you the un-settled Promise object itself instead of the data."
+        },
+        {
+          "id": "prt_08c",
+          "sessionID": "ses_22",
+          "messageID": "msg_08",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.02,
+          "tokens": {
+            "input": 1400,
+            "output": 380,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_09",
+        "sessionID": "ses_22",
+        "role": "user",
+        "time": {
+          "created": 1758910053000
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-sonnet-5"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_09a",
+          "sessionID": "ses_22",
+          "messageID": "msg_09",
+          "type": "text",
+          "text": "ok added await again, works now"
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_10",
+        "sessionID": "ses_22",
+        "role": "assistant",
+        "time": {
+          "created": 1758910055000,
+          "completed": 1758910059000
+        },
+        "parentID": "msg_09",
+        "modelID": "claude-sonnet-5",
+        "providerID": "anthropic",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/home/student/nodebb",
+          "root": "/home/student/nodebb"
+        },
+        "cost": 0.01,
+        "tokens": {
+          "input": 650,
+          "output": 140,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_10a",
+          "sessionID": "ses_22",
+          "messageID": "msg_10",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_10b",
+          "sessionID": "ses_22",
+          "messageID": "msg_10",
+          "type": "tool",
+          "callID": "call_1",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "bun run src/posts/render.ts",
+              "description": "Rerun render script"
+            },
+            "output": "rendered 2 comments for post 1",
+            "title": "Rerun render script",
+            "metadata": {},
+            "time": {
+              "start": 1758910055000,
+              "end": 1758910056000
+            }
+          }
+        },
+        {
+          "id": "prt_10c",
+          "sessionID": "ses_22",
+          "messageID": "msg_10",
+          "type": "text",
+          "text": "Good -- that's the same root cause as the first one, so it's worth a quick grep across the file for any other bare `async` calls before moving on."
+        },
+        {
+          "id": "prt_10d",
+          "sessionID": "ses_22",
+          "messageID": "msg_10",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.01,
+          "tokens": {
+            "input": 650,
+            "output": 140,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
