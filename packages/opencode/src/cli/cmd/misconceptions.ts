@@ -1,5 +1,5 @@
 import { generateObject } from "ai"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Cause, Effect, Option, Schedule, Schema } from "effect"
 import path from "path"
 import { EOL } from "os"
 import { Token } from "@opencode-ai/core/util/token"
@@ -333,6 +333,12 @@ export function table(rows: readonly Row[], transcripts: number) {
   ].join(EOL)
 }
 
+// The AI SDK's validation errors embed the whole reply; keep the first line so a skipped transcript reads clearly.
+function describe(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error)
+  return text.split("\n")[0].slice(0, 200)
+}
+
 function trim(text: string, tokens: number) {
   if (Token.estimate(text) <= tokens) return text
   // Token.estimate counts four characters per token.
@@ -381,9 +387,10 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
   const language = yield* provider.getLanguage(resolved).pipe(Effect.orDie)
   const cfg = yield* config.get()
 
+  // A model call can fail transiently (network, a malformed reply); retry twice before giving up on the piece.
   const ask = <S extends Schema.Decoder<unknown> & Schema.Top>(schema: S, system: string, prompt: string) =>
-    Effect.tryPromise(
-      async (): Promise<S["Type"]> =>
+    Effect.tryPromise({
+      try: async (): Promise<S["Type"]> =>
         (
           await generateObject({
             model: language,
@@ -403,7 +410,8 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
             ],
           })
         ).object,
-    )
+      catch: (error) => new Error(`model call failed: ${describe(error)}`),
+    }).pipe(Effect.retry(Schedule.recurs(2)))
 
   return {
     ask,
