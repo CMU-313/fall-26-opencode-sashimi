@@ -107,8 +107,9 @@ describe("confirm", () => {
     expect(confirm([merge], [keep(0, [3], false)], turns)[0].acted).toBe(false)
   })
 
-  test("depth is replaced by severity: acted makes it severe", () => {
-    expect(confirm([merge], [keep(0, [3], true)], turns)[0].depth).toBe("severe")
+  test("acted is recorded but does not change depth", () => {
+    expect(confirm([merge], [keep(0, [3], true)], turns)[0]).toMatchObject({ depth: "mild", acted: true })
+    expect(confirm([rebase], [keep(0, [], true)], turns)[0]).toMatchObject({ depth: "moderate", acted: true })
   })
 
   test("depth is replaced by severity: repetition across an assistant reply is severe", () => {
@@ -116,13 +117,10 @@ describe("confirm", () => {
     expect(confirm([pull], [keep(0, [3])], turns)[0].depth).toBe("severe")
   })
 
-  test("depth is replaced by severity: a single mild citation stays mild", () => {
+  test("depth is replaced by severity: without repetition the candidate's depth passes through", () => {
     expect(confirm([merge], [keep(0, [3])], turns)[0].depth).toBe("mild")
     expect(confirm([merge], [keep(0, [])], turns)[0].depth).toBe("mild")
-  })
-
-  test("depth is replaced by severity: a single severe citation becomes moderate", () => {
-    expect(confirm([pull], [keep(0, [1])], turns)[0].depth).toBe("moderate")
+    expect(confirm([pull], [keep(0, [1])], turns)[0].depth).toBe("severe")
     expect(confirm([rebase], [keep(0, [])], turns)[0].depth).toBe("moderate")
   })
 
@@ -159,11 +157,12 @@ describe("confirm", () => {
 describe("severity", () => {
   const depths: Depth[] = ["mild", "moderate", "severe"]
 
-  test("acted is severe regardless of depth and citations", () => {
+  test("acted never changes the result", () => {
     depths.forEach((depth) => {
-      expect(severity({ cited: [], acted: true, depth, turns })).toBe("severe")
-      expect(severity({ cited: [0], acted: true, depth, turns })).toBe("severe")
-      expect(severity({ cited: [0, 2], acted: true, depth, turns: [] })).toBe("severe")
+      expect(severity({ cited: [], acted: true, depth, turns })).toBe(depth)
+      expect(severity({ cited: [0], acted: true, depth, turns })).toBe(depth)
+      expect(severity({ cited: [0, 2], acted: true, depth, turns: [] })).toBe(depth)
+      expect(severity({ cited: [0, 2], acted: true, depth, turns })).toBe("severe")
     })
   })
 
@@ -190,40 +189,38 @@ describe("severity", () => {
       { role: "user", text: "b", index: 2 },
       { role: "assistant", text: "after", index: 3 },
     ]
-    expect(severity({ cited: [1, 2], acted: false, depth: "mild", turns: edges })).toBe("moderate")
-    expect(severity({ cited: [1, 2], acted: false, depth: "severe", turns: edges })).toBe("moderate")
+    expect(severity({ cited: [1, 2], acted: false, depth: "mild", turns: edges })).toBe("mild")
+    expect(severity({ cited: [1, 2], acted: false, depth: "moderate", turns: edges })).toBe("moderate")
+    expect(severity({ cited: [1, 2], acted: false, depth: "severe", turns: edges })).toBe("severe")
   })
 
-  test("two citations with only student turns between them are moderate", () => {
+  test("two citations with only student turns between them pass the depth through", () => {
     const students: Turn[] = [
       { role: "user", text: "a", index: 0 },
       { role: "user", text: "b", index: 1 },
       { role: "user", text: "c", index: 2 },
     ]
     depths.forEach((depth) => {
-      expect(severity({ cited: [0, 2], acted: false, depth, turns: students })).toBe("moderate")
+      expect(severity({ cited: [0, 2], acted: false, depth, turns: students })).toBe(depth)
     })
   })
 
-  test("two citations with no turn at all between them are moderate", () => {
+  test("two citations with no turn at all between them pass the depth through", () => {
     depths.forEach((depth) => {
-      expect(severity({ cited: [0, 2], acted: false, depth, turns: [] })).toBe("moderate")
+      expect(severity({ cited: [0, 2], acted: false, depth, turns: [] })).toBe(depth)
     })
   })
 
-  test("at most one citation with mild depth is mild", () => {
-    expect(severity({ cited: [], acted: false, depth: "mild", turns })).toBe("mild")
-    expect(severity({ cited: [0], acted: false, depth: "mild", turns })).toBe("mild")
+  test("no citation passes the depth through", () => {
+    depths.forEach((depth) => {
+      expect(severity({ cited: [], acted: false, depth, turns })).toBe(depth)
+    })
   })
 
-  test("at most one citation with moderate or severe depth is moderate", () => {
-    expect(severity({ cited: [], acted: false, depth: "moderate", turns })).toBe("moderate")
-    expect(severity({ cited: [0], acted: false, depth: "moderate", turns })).toBe("moderate")
-    expect(severity({ cited: [], acted: false, depth: "severe", turns })).toBe("moderate")
-    expect(severity({ cited: [0], acted: false, depth: "severe", turns })).toBe("moderate")
-  })
-
-  test("a single citation is never severe without acted, even with assistant turns around it", () => {
-    expect(severity({ cited: [2], acted: false, depth: "severe", turns })).toBe("moderate")
+  test("a single citation passes the depth through, even with assistant turns around it", () => {
+    depths.forEach((depth) => {
+      expect(severity({ cited: [0], acted: false, depth, turns })).toBe(depth)
+      expect(severity({ cited: [2], acted: false, depth, turns })).toBe(depth)
+    })
   })
 })

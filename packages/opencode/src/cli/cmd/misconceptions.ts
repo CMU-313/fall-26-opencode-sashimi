@@ -113,7 +113,7 @@ Keep a candidate only if a student message shows the student holding or acting o
 For each kept candidate give:
 - id: the candidate's number.
 - cited: the bracket numbers of every student message where the student states, repeats or relies on this misconception.
-- acted: true if the student wrote code, ran a command, pushed, or made a decision based on it.
+- acted: true only if the student carried out something wrong because of it (for example force-pushed the shared branch, committed the secret, merged with the failing check); doing ordinary work in the session is not acting on it.
 Return only the kept candidates.`
 
 const OUTLINE_PROMPT = `You read course material for a software engineering course and produce an outline of its topics.
@@ -511,11 +511,11 @@ export function confirm(
 }
 
 /**
- * Severity from evidence: severe when the student acted on the misconception or repeated it after the assistant had
- * replied; mild when it was shown once and the extraction model called it a brief slip; moderate otherwise.
+ * Severity: the extraction model's rating, raised to severe when the evidence shows the student repeating the
+ * misconception after the assistant had already replied. The verify model's `acted` flag is recorded but not used
+ * here: in practice it was set for most findings, since students do things in nearly every session.
  */
 export function severity(input: { cited: readonly number[]; acted: boolean; depth: Finding["depth"]; turns: readonly Turn[] }) {
-  if (input.acted) return "severe"
   const first = input.cited[0]
   const last = input.cited.at(-1)
   const repeated =
@@ -523,9 +523,7 @@ export function severity(input: { cited: readonly number[]; acted: boolean; dept
     first !== undefined &&
     last !== undefined &&
     input.turns.some((turn) => turn.role === "assistant" && turn.index > first && turn.index < last)
-  if (repeated) return "severe"
-  if (input.cited.length <= 1 && input.depth === "mild") return "mild"
-  return "moderate"
+  return repeated ? "severe" : input.depth
 }
 
 const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, course: string, cache: string) {

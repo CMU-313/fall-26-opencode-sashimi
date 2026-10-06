@@ -530,7 +530,7 @@ describe("opencode misconceptions (subprocess)", () => {
         )
         // w.json: extraction finds nothing, so no verify request is made for it.
         yield* write(path.join(dir, "w.json"), exportOf(user("nothing-wrong-here"), assistant("great")))
-        // x.json: one severe candidate with a single citation and no repetition -> moderate.
+        // x.json: one severe candidate with a single citation and no repetition -> depth passes through.
         yield* write(path.join(dir, "x.json"), exportOf(user("pull again MC{pull|severe|x-pull}")))
         const args = ["misconceptions", dir, "--model", "test/test-model"]
 
@@ -582,7 +582,7 @@ describe("opencode misconceptions (subprocess)", () => {
         expect(output.findings[2].misconceptions[0]).toMatchObject({
           description: "pull",
           evidence: "x-pull",
-          depth: "moderate",
+          depth: "severe",
           messageIndex: 0,
           cited: [0],
           acted: false,
@@ -594,8 +594,8 @@ describe("opencode misconceptions (subprocess)", () => {
         expect(nameX).toMatch(/^x(\.json)?$/)
         expect(output.rows[0]).toMatchObject({
           transcripts: 2,
-          urgency: 5,
-          depth: { severe: 1, moderate: 1, mild: 0 },
+          urgency: 6,
+          depth: { severe: 2, moderate: 0, mild: 0 },
           examples: [
             { transcript: nameV, evidence: "v-pull", messageIndex: 0 },
             { transcript: nameX, evidence: "x-pull", messageIndex: 0 },
@@ -612,8 +612,8 @@ describe("opencode misconceptions (subprocess)", () => {
         const verifiedTable = [
           "Misconceptions across 3 transcript(s), most urgent first:",
           "",
-          "1. Cat-pull  (urgency 5)",
-          "   2 transcript(s): 1 severe, 1 moderate, 0 mild",
+          "1. Cat-pull  (urgency 6)",
+          "   2 transcript(s): 2 severe, 0 moderate, 0 mild",
           `   > v-pull  (${nameV}, message 0)`,
           `   > x-pull  (${nameX}, message 0)`,
           "",
