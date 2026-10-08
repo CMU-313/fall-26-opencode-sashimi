@@ -91,13 +91,24 @@ describe("autoname command", () => {
     })
   })
 
+
   describe("Command registry verification", () => {
     test("Command info structure exists with expected fields", () => {
+      const info = {
+        name: "autoname",
+        source: "command",
+        description: "Automatically rename the session based on conversation history",
+      }
+
       const infoShape = {
         name: expect.any(String),
         source: expect.any(String),
         description: expect.any(String),
       }
+
+      expect(info).toEqual(expect.objectContaining(infoShape))
+      expect(info.name).toBe("autoname")
+      expect(info.description).toContain("rename")
       expect(PROMPT_AUTONAME).toContain("Summarize")
     })
   })
