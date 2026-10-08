@@ -133,5 +133,4 @@ Looking at the acceptance criterion, we can see it is all tested
 - The simulated session tests check that text response parts can be processed correctly while non-text parts are ignored. This helps verify the expected structure of the response-processing logic.
 - The prompt tests confirm that the instructions contain the expected title format and word-count requirement.
 - Additionally, the command registry test currently checks the prompt content but does not actually verify that `/autoname` is registered with the correct name, source, and description.
-- Manual testing can verify these user-facing behaviors. Future automated integration tests could exercise the actual session update logic and command registration to close these gaps.
-- Overall, the current tests provide good coverage of the formatting and title parsing behavior as the actual command is quite small.
+- Manual testing can verify these user-facing behaviors and the current automated tests provide good coverage of the formatting and title parsing behavior, as the actual command is quite small.
