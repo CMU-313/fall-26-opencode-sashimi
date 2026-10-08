@@ -1207,7 +1207,7 @@ const layer = Layer.effect(
               messageID: msg.id,
               sessionID,
               type: "text",
-              text: SessionReminders.label(msgs, session),
+              text: SessionReminders.label(session),
               time: { start: Date.now() },
             })
           }

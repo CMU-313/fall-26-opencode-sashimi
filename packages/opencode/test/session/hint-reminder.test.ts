@@ -16,7 +16,15 @@ const filesystem = Layer.mock(FSUtil.Service)({
   globMatch: () => false,
 })
 
-const it = testEffect(Layer.mergeAll(RuntimeFlags.layer(), filesystem, Layer.mock(Session.Service)({})))
+const it = testEffect(
+  Layer.mergeAll(
+    RuntimeFlags.layer(),
+    filesystem,
+    Layer.mock(Session.Service)({
+      setMetadata: () => Effect.void,
+    }),
+  ),
+)
 
 function userMessage(text: string, agent = "hint", created = 0): SessionV1.WithParts {
   return {
@@ -44,16 +52,17 @@ describe("hint reminder", () => {
   // changes are blocked in the hint agent permissions, which a different test covers.
   it.effect("adds one vague hint and does not give the solution", () =>
     Effect.gen(function* () {
+      const session = {} as Session.Info
       const messages = yield* SessionReminders.apply({
         messages: [userMessage("I'm stuck")],
         agent: { name: "hint" } as Agent.Info,
-        session: {} as Session.Info,
+        session,
       })
       const text = hintText(messages)
       expect(text).toContain("This is hint level 1 of 5")
       expect(text).toContain("Follow only level 1")
       expect(text).not.toContain("Start your reply")
-      expect(SessionReminders.label(messages)).toBe("Hint level 1 of 5")
+      expect(SessionReminders.label(session)).toBe("Hint level 1 of 5")
       expect(text).toContain("high-level hint")
       expect(text).toContain("extremely specific")
       expect(text).toContain("Do not reveal the full solution")
@@ -62,61 +71,49 @@ describe("hint reminder", () => {
     }),
   )
 
-  // The prompt always lists every level. This checks that the filled-in number
-  // climbs and stops at 5, and the solution is still withheld.
+  // The saved number climbs by one per hint and stops at 5. Asking again on
+  // the same message does not add another level.
   it.effect("gets more specific and stops at level 5", () =>
     Effect.gen(function* () {
+      const session = { metadata: { hintLevel: 2 } } as unknown as Session.Info
       const third = yield* SessionReminders.apply({
-        messages: [userMessage("one"), userMessage("two"), userMessage("three")],
+        messages: [userMessage("three")],
         agent: { name: "hint" } as Agent.Info,
-        session: {} as Session.Info,
+        session,
       })
+      const capped = { metadata: { hintLevel: 5 } } as unknown as Session.Info
       const fifth = yield* SessionReminders.apply({
-        messages: [1, 2, 3, 4, 5, 6].map((n) => userMessage(String(n))),
+        messages: [userMessage("six")],
         agent: { name: "hint" } as Agent.Info,
-        session: {} as Session.Info,
+        session: capped,
+      })
+      const again = yield* SessionReminders.apply({
+        messages: [userMessage("six")],
+        agent: { name: "hint" } as Agent.Info,
+        session: capped,
       })
       expect(hintText(third)).toContain("This is hint level 3 of 5")
       expect(hintText(third)).toContain("Follow only level 3")
-      expect(SessionReminders.label(third)).toBe("Hint level 3 of 5")
+      expect(SessionReminders.label(session)).toBe("Hint level 3 of 5")
       expect(hintText(fifth)).toContain("This is hint level 5 of 5")
-      expect(SessionReminders.label(fifth)).toBe("Hint level 5 of 5")
-      expect(hintText(fifth)).toContain("extremely specific")
+      expect(hintText(again)).toContain("This is hint level 5 of 5")
+      expect(capped.metadata?.hintLevel).toBe(5)
       expect(hintText(fifth)).toContain("Do not reveal the full solution")
-      expect(hintText(fifth)).not.toContain("Hint level 6 of 5")
     }),
   )
 
-  // A turn in another mode ends the streak. The next hint is vague again.
-  it.effect("starts over after a message from another mode", () =>
-    Effect.gen(function* () {
-      const messages = yield* SessionReminders.apply({
-        messages: [userMessage("stuck"), userMessage("fix it", "build"), userMessage("still stuck")],
-        agent: { name: "hint" } as Agent.Info,
-        session: {} as Session.Info,
-      })
-      expect(hintText(messages)).toContain("This is hint level 1 of 5")
-      expect(SessionReminders.label(messages)).toBe("Hint level 1 of 5")
-      expect(hintText(messages)).toContain("high-level hint")
-    }),
-  )
-
-  // Switching away records a time. Hint messages from before that do not count,
-  // so coming back starts at level 1 even without a message in the other mode.
+  // Leaving hint mode stores 0. The next hint is level 1 even if older hint
+  // messages are still in the session.
   it.effect("starts over after leaving hint mode", () =>
     Effect.gen(function* () {
-      const session = { metadata: { hintResetAt: 5 } } as unknown as Session.Info
+      const session = { metadata: { hintLevel: 0 } } as unknown as Session.Info
       const messages = yield* SessionReminders.apply({
-        messages: [
-          userMessage("one", "hint", 1),
-          userMessage("two", "hint", 2),
-          userMessage("again", "hint", 10),
-        ],
+        messages: [userMessage("one"), userMessage("two"), userMessage("again")],
         agent: { name: "hint" } as Agent.Info,
         session,
       })
       expect(hintText(messages)).toContain("This is hint level 1 of 5")
-      expect(SessionReminders.label(messages, session)).toBe("Hint level 1 of 5")
+      expect(SessionReminders.label(session)).toBe("Hint level 1 of 5")
     }),
   )
 

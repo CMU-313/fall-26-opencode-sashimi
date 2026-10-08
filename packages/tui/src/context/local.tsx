@@ -89,9 +89,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
-      // Leaving hint mode means the student is moving on. Remember that time
-      // so the next hint starts vague again, even if they switch back before
-      // sending a message.
+      // Leaving hint mode means the student is moving on, so the saved level
+      // goes back to 0 before the next hint.
       function select(name: string) {
         const shown = agentStore.current ?? agents().at(0)?.name
         setAgentStore("current", name)
@@ -101,7 +100,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (!current) return
         void sdk.client.session.update({
           sessionID: route.data.sessionID,
-          metadata: { ...current.metadata, hintResetAt: Date.now() },
+          metadata: { ...current.metadata, hintLevel: 0 },
         })
       }
       return {
