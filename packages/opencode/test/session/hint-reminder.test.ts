@@ -16,12 +16,19 @@ const filesystem = Layer.mock(FSUtil.Service)({
   globMatch: () => false,
 })
 
+// apply() writes the level through the session service. Keep what it sent so
+// a test can check the saved number, not only the text pushed onto the message.
+const saved: { sessionID: string; metadata: { hintLevel?: number; hintMessageID?: string } }[] = []
+
 const it = testEffect(
   Layer.mergeAll(
     RuntimeFlags.layer(),
     filesystem,
     Layer.mock(Session.Service)({
-      setMetadata: () => Effect.void,
+      setMetadata: (input: { sessionID: string; metadata: { hintLevel?: number; hintMessageID?: string } }) => {
+        saved.push(input)
+        return Effect.void
+      },
     }),
   ),
 )
@@ -71,8 +78,7 @@ describe("hint reminder", () => {
     }),
   )
 
-  // The saved number climbs by one per hint and stops at 5. Asking again on
-  // the same message does not add another level.
+  // The saved number climbs by one per hint and stops at 5.
   it.effect("gets more specific and stops at level 5", () =>
     Effect.gen(function* () {
       const session = { metadata: { hintLevel: 2 } } as unknown as Session.Info
@@ -118,14 +124,76 @@ describe("hint reminder", () => {
   )
 
   // Build mode must not get this text, or a normal message would be treated as a hint.
+  // It also must not touch the saved level. Leaving hint mode is what sets it back to 0.
   it.effect("leaves a normal message alone", () =>
     Effect.gen(function* () {
+      saved.length = 0
+      const session = {
+        id: "ses_hint",
+        metadata: { hintLevel: 3, hintMessageID: "msg_hint_earlier" },
+      } as unknown as Session.Info
       const messages = yield* SessionReminders.apply({
-        messages: [userMessage("hello")],
+        messages: [userMessage("hello", "build")],
         agent: { name: "build" } as Agent.Info,
-        session: {} as Session.Info,
+        session,
       })
       expect(messages[0].parts).toHaveLength(1)
+      expect(session.metadata?.hintLevel).toBe(3)
+      expect(session.metadata?.hintMessageID).toBe("msg_hint_earlier")
+      expect(saved).toHaveLength(0)
+    }),
+  )
+
+  // A later step of the same hint used to count as another ask, because the
+  // level was a streak of messages. The saved message id is what stops that.
+  // This starts at 2, where a second bump would show up. At 5 the cap would hide it.
+  it.effect("does not raise the level for the same hint message", () =>
+    Effect.gen(function* () {
+      saved.length = 0
+      const session = { id: "ses_hint", metadata: { hintLevel: 2 } } as unknown as Session.Info
+      const first = yield* SessionReminders.apply({
+        messages: [userMessage("again")],
+        agent: { name: "hint" } as Agent.Info,
+        session,
+      })
+      const second = yield* SessionReminders.apply({
+        messages: [userMessage("again")],
+        agent: { name: "hint" } as Agent.Info,
+        session,
+      })
+      expect(hintText(first)).toContain("This is hint level 3 of 5")
+      expect(hintText(second)).toContain("This is hint level 3 of 5")
+      expect(session.metadata?.hintLevel).toBe(3)
+      expect(session.metadata?.hintMessageID).toBe("msg_hint_again")
+      expect(SessionReminders.label(session)).toBe("Hint level 3 of 5")
+      expect(saved.map((item) => item.metadata.hintLevel)).toEqual([3, 3])
+      expect(saved.every((item) => item.metadata.hintMessageID === "msg_hint_again")).toBe(true)
+    }),
+  )
+
+  // The number on screen is the one stored on the session. A missing level, 0,
+  // and anything past 5 still have to read as a level from 1 to 5.
+  it.effect("shows a hint level between 1 and 5", () =>
+    Effect.gen(function* () {
+      expect(SessionReminders.label(undefined)).toBe("Hint level 1 of 5")
+      expect(SessionReminders.label({ metadata: { hintLevel: 0 } } as unknown as Session.Info)).toBe(
+        "Hint level 1 of 5",
+      )
+      expect(SessionReminders.label({ metadata: { hintLevel: 9 } } as unknown as Session.Info)).toBe(
+        "Hint level 5 of 5",
+      )
+
+      saved.length = 0
+      const session = { id: "ses_hint", metadata: { hintLevel: 9 } } as unknown as Session.Info
+      const messages = yield* SessionReminders.apply({
+        messages: [userMessage("too high")],
+        agent: { name: "hint" } as Agent.Info,
+        session,
+      })
+      expect(hintText(messages)).toContain("This is hint level 5 of 5")
+      expect(session.metadata?.hintLevel).toBe(5)
+      expect(saved[0]?.metadata.hintLevel).toBe(5)
+      expect(saved[0]?.sessionID).toBe("ses_hint")
     }),
   )
 })
