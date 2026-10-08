@@ -1,0 +1,10 @@
+Summarize the entire session in 2-5 words that capture what this conversation is about. Then output exactly:
+
+RENAMED: <2-5 word title>
+
+Rules:
+- The title must be 2-5 words
+- It should reflect the main topic, task, or purpose of the session
+- Use the same language as the user's messages
+- Do not include explanations, apologies, or extra text outside the RENAMED line
+- If the session is very short or generic, use a brief descriptive label like "Quick check-in" or "Initial setup"
