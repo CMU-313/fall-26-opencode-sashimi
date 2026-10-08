@@ -93,6 +93,8 @@ describe("WebFetchTool registration", () => {
       expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
       ])
+      // Tool integration with a mocked HTTP transport; permission metadata is flat.
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(requests).toMatchObject([{ url, headers: { accept: expect.stringContaining("text/plain;q=1.0") } }])
     }),
   )

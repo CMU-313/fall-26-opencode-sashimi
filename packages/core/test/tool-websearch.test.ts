@@ -179,6 +179,8 @@ describe("WebSearchTool registration", () => {
           },
         },
       ])
+      // Tool integration with a mocked MCP transport; provider data is not duplicated under input.
+      expect(assertions[0]?.metadata).not.toHaveProperty("input")
       expect(requests).toEqual([
         {
           url: WebSearchTool.EXA_URL,

@@ -48,6 +48,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogBookmarkList } from "./component/dialog-bookmark-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -91,6 +92,7 @@ registerOpencodeSpinner()
 
 const appGlobalBindingCommands = [
   "session.list",
+  "session.bookmark.list",
   "session.new",
   "session.quick_switch.1",
   "session.quick_switch.2",
@@ -576,6 +578,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashAliases: ["resume", "continue"],
         run: () => {
           dialog.replace(() => <DialogSessionList />)
+        },
+      },
+      {
+        name: "session.bookmark.list",
+        title: "View bookmarked responses",
+        category: "Session",
+        slashName: "bookmarks",
+        run: () => {
+          dialog.replace(() => <DialogBookmarkList />)
         },
       },
       {

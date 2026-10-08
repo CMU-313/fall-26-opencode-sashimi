@@ -73,15 +73,16 @@ test("shows a pending question dock", async ({ page }) => {
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
 })
 
+// Browser UI test with a mocked permission request; verify its description and approval controls render together.
 test("shows a pending permission dock", async ({ page }) => {
   await mockServer(page, {
     permissions: [
       {
         id: "permission-request",
         sessionID,
-        permission: "bash",
+        permission: "read",
         patterns: ["git status", "git diff"],
-        metadata: {},
+        metadata: { path: "src/components/Button.tsx" },
         always: [],
       },
     ],
@@ -92,9 +93,14 @@ test("shows a pending permission dock", async ({ page }) => {
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   await expect(permission).toBeVisible()
+  await expect(permission.locator('[data-slot="permission-hint"]')).toHaveText(
+    "Agent wants to read the file src/components/Button.tsx",
+  )
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
+  await expect(permission.getByRole("button", { name: "Deny" })).toBeVisible()
+  await expect(permission.getByRole("button", { name: "Allow once" })).toBeVisible()
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
 
   const reply = page.waitForRequest((request) => request.method() === "POST")
@@ -102,6 +108,38 @@ test("shows a pending permission dock", async ({ page }) => {
   const request = await reply
   expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
   expect(request.postDataJSON()).toEqual({ reply: "once" })
+})
+
+// Browser UI test with mocked metadata; inspect raw text for one-line truncation instead of normalized matcher text.
+test("summarizes long commands in the pending permission dock", async ({ page }) => {
+  const command = `npm install ${Array.from({ length: 20 }, () => "long-package-name").join(" ")}`
+  await mockServer(page, {
+    permissions: [
+      {
+        id: "long-command-permission",
+        sessionID,
+        permission: "bash",
+        patterns: [command],
+        metadata: { command },
+        always: [],
+      },
+    ],
+  })
+
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const description = permission.locator('[data-slot="permission-hint"]')
+  await expect(permission).toBeVisible()
+  await expect(description).toHaveCount(1)
+  const text = await description.evaluate((element) => element.textContent ?? "")
+  expect(text).toContain("Agent wants to run: npm install long-package-name")
+  expect(text).not.toMatch(/[\r\n]/)
+  expect(text.length).toBeLessThanOrEqual(120)
+  await expect(permission.locator('[data-slot="permission-patterns"] code')).toHaveText(command)
+  await expect(permission.getByRole("button", { name: "Deny" })).toBeVisible()
+  await expect(permission.getByRole("button", { name: "Allow once" })).toBeVisible()
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {

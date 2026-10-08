@@ -100,6 +100,8 @@ describe("TodoWriteTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
+      // Tool integration: the permission request carries the todo payload without a second nested copy.
+      expect(assertions[0]?.metadata).toEqual({ todos: todoList })
       expect(yield* service.get(sessionID)).toEqual(todoList)
     }),
   )

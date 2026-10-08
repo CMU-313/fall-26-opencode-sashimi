@@ -135,6 +135,7 @@ const sessionBindingCommands = [
   "session.message.next",
   "session.message.previous",
   "messages.copy",
+  "session.bookmark.toggle",
   "session.copy",
   "session.export",
   "session.child.first",
@@ -286,6 +287,7 @@ export function Session() {
 
   createEffect(() => {
     const sessionID = route.sessionID
+    const messageID = route.messageID
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
@@ -312,7 +314,12 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      if (route.sessionID !== sessionID || !scroll) return
+      if (messageID) {
+        scrollToMessageID(messageID)
+        return
+      }
+      scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
@@ -426,6 +433,47 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
+  }
+
+  // Positions `messageID` in view and returns whether it was found. Content can
+  // still be streaming in right after a session is opened (message list still
+  // growing), which can re-trigger the scrollbox's sticky-to-bottom behavior a
+  // moment after we've positioned; the caller re-applies this over a short
+  // settling window so the position self-corrects if that happens.
+  function applyScrollToMessage(messageID: string): boolean {
+    if (!scroll || scroll.isDestroyed) return false
+    if (route.messageID !== messageID) return false
+    const found = scroll.content.findDescendantById(messageID)
+    if (!found) return false
+    const viewportTop = scroll.viewport.y
+    const viewportBottom = viewportTop + scroll.viewport.height
+    const childTop = found.y
+    const childBottom = found.y + found.height
+    let delta = 0
+    if (childTop < viewportTop) delta = childTop - viewportTop
+    else if (childBottom > viewportBottom) delta = childBottom - viewportBottom
+    const wasSticky = scroll.stickyScroll
+    scroll.stickyScroll = false
+    scroll.scrollTop = scroll.scrollTop + delta
+    scroll.stickyScroll = wasSticky
+    return true
+  }
+
+  function scrollToMessageID(messageID: string, attempt = 0) {
+    if (!scroll || scroll.isDestroyed) return
+    if (route.messageID !== messageID) return
+    const applied = applyScrollToMessage(messageID)
+    if (!applied) {
+      if (attempt < 10) {
+        setTimeout(() => scrollToMessageID(messageID, attempt + 1), 50)
+        return
+      }
+      if (scroll && !scroll.isDestroyed) scroll.scrollTop = scroll.scrollHeight
+      return
+    }
+    for (const delay of [50, 150, 300, 600, 1000]) {
+      setTimeout(() => applyScrollToMessage(messageID), delay)
+    }
   }
 
   const local = useLocal()
@@ -911,6 +959,58 @@ export function Session() {
           .write?.(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
+      title: local.bookmark.has(messagesBeforeRevert().findLast((message) => message.role === "assistant")?.id ?? "")
+        ? "Remove bookmark"
+        : "Bookmark last assistant response",
+      value: "session.bookmark.toggle",
+      category: "Session",
+      run: async () => {
+        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        // A still-streaming message's text is incomplete; bookmarking it now
+        // would freeze the saved copy at whatever text has arrived so far.
+        if (!lastAssistantMessage.time.completed) {
+          toast.show({ message: "Wait for the response to finish before bookmarking it", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        const text = textParts
+          .filter((part) => !part.synthetic)
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        if (!text) {
+          toast.show({ message: "No text content found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        try {
+          const result = await local.bookmark.toggle({
+            id: lastAssistantMessage.id,
+            sessionID: route.sessionID,
+            sessionTitle: session()?.title ?? "Untitled session",
+            text,
+          })
+          toast.show({
+            message: result === "added" ? "Response bookmarked" : "Bookmark removed",
+            variant: "success",
+          })
+        } catch (error) {
+          toast.show({ message: `Failed to save bookmark: ${errorMessage(error)}`, variant: "error" })
+        }
         dialog.clear()
       },
     },
@@ -1492,6 +1592,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
+      <box id={props.message.id} height={0} />
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
