@@ -1,6 +1,6 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { describe, expect } from "bun:test"
+import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Layer, Sink } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -54,6 +54,12 @@ function hintText(messages: SessionV1.WithParts[]) {
 }
 
 describe("hint reminder", () => {
+  // saved is shared by every test in this file. Clear it here so a test does
+  // not depend on whichever one ran before it.
+  beforeEach(() => {
+    saved.length = 0
+  })
+
   // Checks the wording, not the tool flags. The prompt lists every level, but
   // this turn must follow level 1 and must not include the solution. File
   // changes are blocked in the hint agent permissions, which a different test covers.

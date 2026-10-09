@@ -97,6 +97,31 @@ it.instance("hint agent is selectable and cannot change the project", () =>
   }),
 )
 
+// User config is merged before the hint denies. An edit/bash/task allow in
+// that config must not turn file changes back on.
+it.instance(
+  "hint agent still denies edits when the user config allows them",
+  () =>
+    Effect.gen(function* () {
+      const hint = yield* load((svc) => svc.get("hint"))
+      expect(evalPerm(hint, "edit")).toBe("deny")
+      expect(evalPerm(hint, "bash")).toBe("deny")
+      expect(evalPerm(hint, "task")).toBe("deny")
+      expect(Permission.disabled(["edit", "write", "apply_patch", "bash"], hint!.permission)).toEqual(
+        new Set(["edit", "write", "apply_patch", "bash"]),
+      )
+    }),
+  {
+    config: {
+      permission: {
+        edit: "allow",
+        bash: "allow",
+        task: "allow",
+      },
+    },
+  },
+)
+
 it.instance("plan agent denies the general subagent by default", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
