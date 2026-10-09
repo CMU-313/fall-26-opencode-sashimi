@@ -204,7 +204,7 @@ export const run = Effect.fn("Cli.misconceptions")(function* (args: Args) {
           {
             transcripts: results.length - skipped.length,
             rows,
-            skipped,
+            skipped: skipped.map((item) => ({ file: item.file, error: item.error.split(EOL)[0] })),
             findings: results.filter((result) => result.error === undefined).map((result) => ({ file: result.file, misconceptions: result.findings })),
           },
           null,

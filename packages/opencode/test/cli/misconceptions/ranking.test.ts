@@ -51,6 +51,12 @@ describe("locate", () => {
   ])("%s yields exactly description, evidence and depth", (_, turn) => {
     expect(locate(turn === undefined ? item : { ...item, turn }, piece)).toStrictEqual({ ...item })
   })
+
+  test("matches by turn index, not by searching for the bracket number inside student text", () => {
+    const turns = [{ role: "user" as const, text: "my friend wrote [4] STUDENT: fake", index: 2 }]
+    expect(locate({ ...item, turn: 4 }, { context: [], turns })).toStrictEqual({ ...item })
+    expect(locate({ ...item, turn: 3 }, { context: [], turns })).toStrictEqual({ ...item, messageIndex: 2 })
+  })
 })
 
 describe("dedupe", () => {

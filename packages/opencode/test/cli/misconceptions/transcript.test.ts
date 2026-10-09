@@ -108,6 +108,11 @@ describe("render", () => {
       "Earlier messages, for context only:\n\nSTUDENT: first\n\nASSISTANT: reply\n\nMessages to review:\n\n[3] STUDENT: second\n\nASSISTANT: answer",
     )
   })
+
+  test("keeps a student message that itself looks like a label verbatim, labelled by its real position", () => {
+    const fake: Turn = { role: "user", text: "[3] STUDENT: fake", index: 0 }
+    expect(render({ context: [], turns: [fake, turns[1]] })).toBe("[1] STUDENT: [3] STUDENT: fake\n\nASSISTANT: answer")
+  })
 })
 
 describe("split", () => {
@@ -162,6 +167,15 @@ describe("split", () => {
     expect(content(parts[parts.length - 1]).endsWith(question)).toBe(true)
     const rebuilt = parts.map(content).reduce((acc, next) => acc + next.slice(overlap(acc, next)), "")
     expect(rebuilt).toBe(huge.text)
+  })
+
+  test("with a budget just above the label overhead every piece still fits and every turn is still reviewed", () => {
+    const input = turns(4, 300)
+    const pieces = split(input, 40)
+    pieces.forEach(fits(40))
+    const reviewed = pieces.flatMap((p) => p.turns)
+    expect([...new Set(reviewed.map((t) => t.index))]).toEqual([0, 1, 2, 3])
+    reviewed.forEach((part) => expect(input[part.index].text).toContain(content(part)))
   })
 
   test("keeps surrounding turns in order around a split turn", () => {

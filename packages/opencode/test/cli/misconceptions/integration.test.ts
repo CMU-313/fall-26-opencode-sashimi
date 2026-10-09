@@ -344,6 +344,14 @@ describe("misconceptions stages (in-process)", () => {
       expect(multi[0].user).toMatch(/# a\.md\n[^]*Pull is fetch plus merge\.[^]*# b\.txt\n[^]*Branches diverge\./)
       expect(multi[0].user).not.toContain("NOT-COURSE")
       expect(yield* readJson(path.join(cache, "topics.json"))).toEqual({ topics })
+
+      // Material in a nested subdirectory is included too, under its base name.
+      yield* write(path.join(dir, "week2", "notes.md"), "Rebase replays commits.")
+      expect(yield* outline(ctx.llm, dir, path.join(ctx.dir, "nested-cache"))).toEqual(topics)
+      const nested = ctx.model.take()
+      expect(nested.map((r) => r.kind)).toEqual(["outline"])
+      expect(nested[0].user).toMatch(/# notes\.md\n[^]*Rebase replays commits\./)
+      expect(nested[0].user).toContain("Pull is fetch plus merge.")
     }),
     TIMEOUT,
   )
