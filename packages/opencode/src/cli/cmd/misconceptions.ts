@@ -153,7 +153,13 @@ export const MisconceptionsCommand = effectCmd({
         type: "boolean",
         default: true,
       }),
-  handler: Effect.fn("Cli.misconceptions")(function* (args) {
+  handler: (args) => run(args).pipe(Effect.map((output) => process.stdout.write(output))),
+})
+
+export type Args = { dir: string; course?: string; model?: string; json?: boolean; verify: boolean }
+
+/** The whole command apart from printing: returns what goes to stdout, writes progress and notes to stderr. */
+export const run = Effect.fn("Cli.misconceptions")(function* (args: Args) {
     const dir = path.resolve(args.dir)
     const files = yield* Effect.promise(() => Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: dir })))
     if (files.length === 0) return yield* fail(`No .json session exports found in ${dir}`)
@@ -191,8 +197,9 @@ export const MisconceptionsCommand = effectCmd({
     yield* Effect.promise(() => Bun.write(saved, ranking + EOL))
     process.stderr.write(`Saved ranking to ${saved}${EOL}`)
 
-    if (args.json) {
-      process.stdout.write(
+    skipped.forEach((item) => process.stderr.write(`Skipped ${item.file}: ${item.error.split(EOL)[0]}${EOL}`))
+    if (args.json)
+      return (
         JSON.stringify(
           {
             transcripts: results.length - skipped.length,
@@ -202,13 +209,9 @@ export const MisconceptionsCommand = effectCmd({
           },
           null,
           2,
-        ) + EOL,
+        ) + EOL
       )
-      return
-    }
-    process.stdout.write(ranking + EOL)
-    skipped.forEach((item) => process.stderr.write(`Skipped ${item.file}: ${item.error.split(EOL)[0]}${EOL}`))
-  }),
+    return ranking + EOL
 })
 
 // `index` is the message's position in the export's `messages` array.
