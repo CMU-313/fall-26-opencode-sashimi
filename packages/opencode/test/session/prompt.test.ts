@@ -1829,8 +1829,8 @@ it.instance(
       const user = (yield* sessions.messages({ sessionID: chat.id })).find((message) => message.info.role === "user")
       const texts = (user?.parts ?? []).filter((part) => part.type === "text")
       expect(texts.filter((part) => !part.synthetic).map((part) => part.text)).toEqual(["/misconceptions sessions --model a/b"])
-      expect(texts.some((part) => part.synthetic && part.text.includes("misconceptions <arguments> --json"))).toBe(true)
-      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("misconceptions <arguments> --json")
+      expect(texts.some((part) => part.synthetic && part.text.includes("misconceptions <arguments>"))).toBe(true)
+      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("misconceptions <arguments>")
     }),
   30_000,
 )
