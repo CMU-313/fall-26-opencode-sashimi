@@ -20,6 +20,8 @@ const LABEL_TOKENS = 25
 const PIECE_TOKENS = 60_000
 // Room left for the system prompt and instructions around each piece.
 const PROMPT_TOKENS = 2_000
+// Smallest piece worth sending; below this a model's context is too small to review a conversation at all.
+const MIN_PIECE_TOKENS = 500
 const CONCURRENCY = 4
 // Bump when the extraction prompt or schema changes so cached findings are recomputed.
 const CACHE_VERSION = 3
@@ -449,7 +451,8 @@ export const connect = Effect.fn("Cli.misconceptions.connect")(function* (model:
   return {
     ask,
     key: `${ref.providerID}/${ref.modelID}`,
-    budget: Math.max(PROMPT_TOKENS, Math.min(usable({ cfg, model: resolved }) || PIECE_TOKENS, PIECE_TOKENS) - PROMPT_TOKENS),
+    // Never hand out more than the model can take: a tiny context leaves a small budget rather than the prompt reserve.
+    budget: Math.max(MIN_PIECE_TOKENS, Math.min(usable({ cfg, model: resolved }) || PIECE_TOKENS, PIECE_TOKENS) - PROMPT_TOKENS),
   }
 })
 
