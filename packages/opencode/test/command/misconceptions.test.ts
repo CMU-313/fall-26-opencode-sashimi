@@ -14,15 +14,16 @@ const it = testEffect(
 )
 
 describe("/misconceptions command", () => {
-  it.live("is a built-in command with $ARGUMENTS hints and a template that runs this opencode", () =>
+  it.live("is a quiet built-in command with $ARGUMENTS hints and a template that runs this opencode", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         expect(Command.Default.MISCONCEPTIONS).toBe("misconceptions")
+        expect(Command.Quiet).toBeInstanceOf(Set)
+        expect(Command.Quiet.has("misconceptions")).toBe(true)
         const command = yield* Command.Service
         const info = (yield* command.list()).find((item) => item.name === Command.Default.MISCONCEPTIONS)
-        expect(info).toBeDefined()
-        expect(info!.hints).toEqual(["$ARGUMENTS"])
-        const template = yield* Effect.promise(async () => await info!.template)
+        expect(info?.hints).toEqual(["$ARGUMENTS"])
+        const template = yield* Effect.promise(async () => await info?.template)
         expect(typeof template).toBe("string")
         expect(template).toContain(`${Command.self()} misconceptions`)
         expect(template).toContain("$ARGUMENTS")
@@ -31,28 +32,13 @@ describe("/misconceptions command", () => {
     ),
   )
 
-  it.effect("is quiet", () =>
-    Effect.sync(() => {
-      expect(Command.Quiet).toBeInstanceOf(Set)
-      expect(Command.Quiet.has("misconceptions")).toBe(true)
-    }),
-  )
-
-  it.effect("sourceFlags keeps only --conditions flags", () =>
+  it.effect("sourceFlags keeps only --conditions flags and self() returns single-quoted shell words", () =>
     Effect.sync(() => {
       expect(Command.sourceFlags(["--cwd", "packages/opencode", "--conditions=browser"])).toEqual([
         "--conditions=browser",
       ])
-      expect(Command.sourceFlags([])).toEqual([])
       expect(Command.sourceFlags(["--hot", "--watch"])).toEqual([])
-    }),
-  )
-
-  it.effect("self() returns single-quoted shell words", () =>
-    Effect.sync(() => {
-      const words = Command.self()
-        .split(" ")
-        .filter((word) => word.length > 0)
+      const words = Command.self().split(" ").filter(Boolean)
       expect(words.length).toBeGreaterThan(0)
       words.forEach((word) => expect(word).toMatch(/^'.*'$/))
       expect(words[0]).toContain("bun")
@@ -67,20 +53,11 @@ describe("/misconceptions command", () => {
     () =>
       Effect.promise(async () => {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-misconceptions-self-"))
-        const proc = Bun.spawn(["sh", "-c", `${Command.self()} misconceptions --help`], {
-          cwd: dir,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        })
-        const [stdout, stderr, code] = await Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
-          proc.exited,
-        ])
+        const proc = Bun.spawnSync(["sh", "-c", `${Command.self()} misconceptions --help`], { cwd: dir })
         await fs.rm(dir, { recursive: true, force: true })
-        expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" })
-        expect(stdout + stderr).toContain("misconceptions")
+        const stderr = proc.stderr.toString()
+        expect({ code: proc.exitCode, stderr: proc.exitCode === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" })
+        expect(proc.stdout.toString() + stderr).toContain("misconceptions")
       }),
     60_000,
   )

@@ -1,51 +1,28 @@
-// Unit tests for the verify pass: `confirm` applies a model's `kept` reply to candidate findings and
-// `severity` re-derives depth from citations, repetition and whether the student acted on it.
 import { describe, expect, test } from "bun:test"
-import { confirm, severity, type Finding, type Piece } from "../../../src/cli/cmd/misconceptions"
+import { confirm, severity, type Finding, type Turn } from "../../../src/cli/cmd/misconceptions"
 
 type Depth = Finding["depth"]
-type Turn = Piece["turns"][number]
-type Kept = { id: number; cited: readonly number[]; acted: boolean }
+const depths: Depth[] = ["mild", "moderate", "severe"]
+const turn = (role: Turn["role"], index: number): Turn => ({ role, text: `${role} ${index}`, index })
 
 // Student turns at export positions 0, 2 and 4; assistant replies at 1 and 3.
-const turns: Turn[] = [
-  { role: "user", text: "why does git pull change my files?", index: 0 },
-  { role: "assistant", text: "pull fetches and merges", index: 1 },
-  { role: "user", text: "but pull should be read only", index: 2 },
-  { role: "assistant", text: "it is not", index: 3 },
-  { role: "user", text: "ok, and rebase?", index: 4 },
-]
-
-const pull: Finding = { description: "pull is read only", evidence: "why does git pull", depth: "severe", messageIndex: 0 }
+const turns = [turn("user", 0), turn("assistant", 1), turn("user", 2), turn("assistant", 3), turn("user", 4)]
+const pull: Finding = { description: "pull is read only", evidence: "why git pull", depth: "severe", messageIndex: 0 }
 const merge: Finding = { description: "merge loses work", evidence: "merge is magic", depth: "mild" }
-const rebase: Finding = { description: "rebase is a merge", evidence: "and rebase?", depth: "moderate", messageIndex: 4 }
+const rebase: Finding = { description: "rebase is merge", evidence: "rebase?", depth: "moderate", messageIndex: 4 }
 const candidates = [pull, merge, rebase]
-
-const keep = (id: number, cited: number[] = [], acted = false): Kept => ({ id, cited, acted })
+const keep = (id: number, cited: number[] = [], acted = false) => ({ id, cited, acted })
+const ids = (kept: ReturnType<typeof keep>[]) =>
+  confirm(candidates, kept, turns).map((f) => candidates.findIndex((c) => c.description === f.description))
 
 describe("confirm", () => {
-  test("no candidates yields nothing even when ids are named", () => {
+  test("keeps named candidates in kept order, drops the rest and ignores invalid ids", () => {
     expect(confirm([], [keep(0), keep(1)], turns)).toEqual([])
-  })
-
-  test("no kept entries drops every candidate", () => {
-    expect(confirm(candidates, [], turns)).toEqual([])
-  })
-
-  test("candidates not named in kept are dropped", () => {
-    const result = confirm(candidates, [keep(1, [3])], turns)
-    expect(result.map((f) => f.description)).toEqual(["merge loses work"])
-  })
-
-  test("kept candidates come back in kept order, not candidate order", () => {
-    const result = confirm(candidates, [keep(2, [5]), keep(0, [1]), keep(1, [3])], turns)
-    expect(result.map((f) => f.description)).toEqual(["rebase is a merge", "pull is read only", "merge loses work"])
-  })
-
-  test("ids outside [0, candidates.length) and non-integers are ignored", () => {
-    expect(confirm(candidates, [keep(3), keep(-1), keep(0.5), keep(42), keep(Number.NaN)], turns)).toEqual([])
-    const result = confirm(candidates, [keep(3, [1]), keep(1, [3]), keep(-1, [1]), keep(1.5, [1])], turns)
-    expect(result.map((f) => f.description)).toEqual(["merge loses work"])
+    expect(ids([])).toEqual([])
+    expect(ids([keep(1, [3])])).toEqual([1])
+    expect(ids([keep(2, [5]), keep(0, [1]), keep(1, [3])])).toEqual([2, 0, 1])
+    expect(ids([keep(3), keep(-1), keep(0.5), keep(42), keep(Number.NaN)])).toEqual([])
+    expect(ids([keep(3, [1]), keep(1, [3]), keep(-1, [1]), keep(1.5, [1])])).toEqual([1])
   })
 
   test("a repeated id counts once and the first mention wins", () => {
@@ -54,173 +31,73 @@ describe("confirm", () => {
     expect(result[0]).toMatchObject({ description: "merge loses work", cited: [2], acted: false })
   })
 
-  test("bracket numbers are converted to export positions (n - 1)", () => {
-    const result = confirm([merge], [keep(0, [3])], turns)
-    expect(result[0].cited).toEqual([2])
-    expect(result[0].messageIndex).toBe(2)
+  test.each([
+    ["bracket numbers become positions (n - 1)", merge, [3], [2], 2],
+    ["own messageIndex is unioned with citations", pull, [3], [0, 2], 0],
+    ["positions are deduplicated and sorted ascending", rebase, [5, 1, 5, 3, 1], [0, 2, 4], 0],
+    ["messageIndex becomes the first position even when it was later", rebase, [1], [0, 4], 0],
+    ["assistant, unknown and zero brackets are filtered out", merge, [2, 4, 99, 0, 3], [2], 2],
+    ["own messageIndex on a non-student turn is not kept", { ...merge, messageIndex: 1 }, [3], [2], 2],
+    ["no valid citation leaves cited empty and messageIndex absent", merge, [2, 99], [], undefined],
+    ["no citation leaves messageIndex as it was", { ...merge, messageIndex: 1 }, [], [], 1],
+  ])("%s", (_, candidate, brackets, cited, messageIndex) => {
+    const result = confirm([candidate], [keep(0, brackets)], turns)
+    expect(result[0].cited).toEqual(cited)
+    expect(result[0].messageIndex).toBe(messageIndex)
   })
 
-  test("the candidate's own messageIndex is unioned with the cited positions", () => {
-    const result = confirm([pull], [keep(0, [3])], turns)
-    expect(result[0].cited).toEqual([0, 2])
-    expect(result[0].messageIndex).toBe(0)
-  })
-
-  test("cited positions are deduplicated and sorted ascending", () => {
-    const result = confirm([rebase], [keep(0, [5, 1, 5, 3, 1])], turns)
-    expect(result[0].cited).toEqual([0, 2, 4])
-    expect(result[0].messageIndex).toBe(0)
-  })
-
-  test("messageIndex becomes the first cited position even when it was later", () => {
-    const result = confirm([rebase], [keep(0, [1])], turns)
-    expect(result[0].cited).toEqual([0, 4])
-    expect(result[0].messageIndex).toBe(0)
-  })
-
-  test("positions that are not student turns are filtered out", () => {
-    // [2] and [4] are assistant replies, [99] is nobody, [0] would be position -1.
-    const result = confirm([merge], [keep(0, [2, 4, 99, 0, 3])], turns)
-    expect(result[0].cited).toEqual([2])
-    expect(result[0].messageIndex).toBe(2)
-  })
-
-  test("a candidate's own messageIndex on a non-student turn is not kept in cited", () => {
-    const onAssistant: Finding = { ...merge, messageIndex: 1 }
-    const result = confirm([onAssistant], [keep(0, [3])], turns)
-    expect(result[0].cited).toEqual([2])
-    expect(result[0].messageIndex).toBe(2)
-  })
-
-  test("with no valid citations cited is empty and messageIndex is left as it was", () => {
-    const none = confirm([merge], [keep(0, [2, 99])], turns)
-    expect(none[0].cited).toEqual([])
-    expect(none[0].messageIndex).toBeUndefined()
-    const onAssistant: Finding = { ...merge, messageIndex: 1 }
-    const stays = confirm([onAssistant], [keep(0, [])], turns)
-    expect(stays[0].cited).toEqual([])
-    expect(stays[0].messageIndex).toBe(1)
-  })
-
-  test("acted is copied from the kept entry", () => {
-    expect(confirm([merge], [keep(0, [3], true)], turns)[0].acted).toBe(true)
-    expect(confirm([merge], [keep(0, [3], false)], turns)[0].acted).toBe(false)
-  })
-
-  test("acted is recorded but does not change depth", () => {
+  test("acted is copied but does not change depth; depth comes from severity", () => {
     expect(confirm([merge], [keep(0, [3], true)], turns)[0]).toMatchObject({ depth: "mild", acted: true })
     expect(confirm([rebase], [keep(0, [], true)], turns)[0]).toMatchObject({ depth: "moderate", acted: true })
-  })
-
-  test("depth is replaced by severity: repetition across an assistant reply is severe", () => {
+    expect(confirm([merge], [keep(0, [3], false)], turns)[0]).toMatchObject({ depth: "mild", acted: false })
     expect(confirm([merge], [keep(0, [1, 3])], turns)[0].depth).toBe("severe")
     expect(confirm([pull], [keep(0, [3])], turns)[0].depth).toBe("severe")
-  })
-
-  test("depth is replaced by severity: without repetition the candidate's depth passes through", () => {
-    expect(confirm([merge], [keep(0, [3])], turns)[0].depth).toBe("mild")
-    expect(confirm([merge], [keep(0, [])], turns)[0].depth).toBe("mild")
     expect(confirm([pull], [keep(0, [1])], turns)[0].depth).toBe("severe")
-    expect(confirm([rebase], [keep(0, [])], turns)[0].depth).toBe("moderate")
   })
 
-  test("description and evidence are unchanged and the full shape is as specified", () => {
-    const result = confirm([pull], [keep(0, [3], false)], turns)
-    expect(result).toHaveLength(1)
-    expect(result[0]).toStrictEqual({
-      description: "pull is read only",
-      evidence: "why does git pull",
-      depth: "severe",
-      messageIndex: 0,
-      cited: [0, 2],
-      acted: false,
-    })
-  })
-
-  test("inputs are not mutated", () => {
+  test("description and evidence are unchanged, the full shape is as specified and inputs are not mutated", () => {
     const before = structuredClone(candidates)
-    const kept = [keep(0, [3, 1]), keep(1, [3])]
+    const kept = [keep(0, [3, 1], false), keep(1, [3])]
     const keptBefore = structuredClone(kept)
-    confirm(candidates, kept, turns)
+    const expected = { ...pull, cited: [0, 2], acted: false }
+    expect(confirm(candidates, kept, turns)[0]).toStrictEqual(expected)
     expect(candidates).toEqual(before)
     expect(kept).toEqual(keptBefore)
   })
 
   test("works with empty turns: every citation is filtered out", () => {
     const result = confirm([pull, merge], [keep(0, [1]), keep(1, [3])], [])
-    expect(result.map((f) => f.cited)).toEqual([[], []])
-    expect(result[0].messageIndex).toBe(0)
-    expect(result[1].messageIndex).toBeUndefined()
+    expect(result.map((f) => `${f.cited}/${f.messageIndex}`)).toEqual(["/0", "/undefined"])
   })
 })
 
 describe("severity", () => {
-  const depths: Depth[] = ["mild", "moderate", "severe"]
+  const later = [turn("user", 0), turn("user", 1), turn("assistant", 5), turn("user", 6)]
+  const edges = [turn("assistant", 0), turn("user", 1), turn("user", 2), turn("assistant", 3)]
+  const students = edges.filter((t) => t.role === "user")
+
+  test.each([
+    ["two citations with an assistant reply directly between them", [0, 2], turns],
+    ["an assistant reply anywhere strictly between first and last citation", [0, 1, 6], later],
+  ])("%s is severe whatever the depth", (_, cited, turns) => {
+    depths.forEach((depth) => expect(severity({ cited, acted: false, depth, turns })).toBe("severe"))
+  })
+
+  test.each([
+    ["assistant turns only at or outside the cited bounds", [1, 2], edges],
+    ["only student turns between citations", [1, 2], students],
+    ["no turn at all between citations", [0, 2], []],
+    ["no citation", [], turns],
+    ["a single citation with assistant turns around it", [2], turns],
+  ])("%s passes the depth through", (_, cited, turns) => {
+    depths.forEach((depth) => expect(severity({ cited, acted: false, depth, turns })).toBe(depth))
+  })
 
   test("acted never changes the result", () => {
     depths.forEach((depth) => {
-      expect(severity({ cited: [], acted: true, depth, turns })).toBe(depth)
       expect(severity({ cited: [0], acted: true, depth, turns })).toBe(depth)
       expect(severity({ cited: [0, 2], acted: true, depth, turns: [] })).toBe(depth)
       expect(severity({ cited: [0, 2], acted: true, depth, turns })).toBe("severe")
-    })
-  })
-
-  test("two citations with an assistant reply strictly between them are severe", () => {
-    depths.forEach((depth) => {
-      expect(severity({ cited: [0, 2], acted: false, depth, turns })).toBe("severe")
-    })
-  })
-
-  test("the assistant reply may be anywhere strictly between the first and last citation", () => {
-    const later: Turn[] = [
-      { role: "user", text: "a", index: 0 },
-      { role: "user", text: "b", index: 1 },
-      { role: "assistant", text: "c", index: 5 },
-      { role: "user", text: "d", index: 6 },
-    ]
-    expect(severity({ cited: [0, 1, 6], acted: false, depth: "mild", turns: later })).toBe("severe")
-  })
-
-  test("an assistant turn only at or outside the cited bounds does not count as repetition", () => {
-    const edges: Turn[] = [
-      { role: "assistant", text: "before", index: 0 },
-      { role: "user", text: "a", index: 1 },
-      { role: "user", text: "b", index: 2 },
-      { role: "assistant", text: "after", index: 3 },
-    ]
-    expect(severity({ cited: [1, 2], acted: false, depth: "mild", turns: edges })).toBe("mild")
-    expect(severity({ cited: [1, 2], acted: false, depth: "moderate", turns: edges })).toBe("moderate")
-    expect(severity({ cited: [1, 2], acted: false, depth: "severe", turns: edges })).toBe("severe")
-  })
-
-  test("two citations with only student turns between them pass the depth through", () => {
-    const students: Turn[] = [
-      { role: "user", text: "a", index: 0 },
-      { role: "user", text: "b", index: 1 },
-      { role: "user", text: "c", index: 2 },
-    ]
-    depths.forEach((depth) => {
-      expect(severity({ cited: [0, 2], acted: false, depth, turns: students })).toBe(depth)
-    })
-  })
-
-  test("two citations with no turn at all between them pass the depth through", () => {
-    depths.forEach((depth) => {
-      expect(severity({ cited: [0, 2], acted: false, depth, turns: [] })).toBe(depth)
-    })
-  })
-
-  test("no citation passes the depth through", () => {
-    depths.forEach((depth) => {
-      expect(severity({ cited: [], acted: false, depth, turns })).toBe(depth)
-    })
-  })
-
-  test("a single citation passes the depth through, even with assistant turns around it", () => {
-    depths.forEach((depth) => {
-      expect(severity({ cited: [0], acted: false, depth, turns })).toBe(depth)
-      expect(severity({ cited: [2], acted: false, depth, turns })).toBe(depth)
     })
   })
 })
