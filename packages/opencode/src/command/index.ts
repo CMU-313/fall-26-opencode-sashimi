@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import PROMPT_MISCONCEPTIONS from "./template/misconceptions.txt"
+import PROMPT_AUTONAME from "./template/autoname.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
@@ -100,6 +101,13 @@ const layer = Layer.effect(
           return PROMPT_MISCONCEPTIONS.replace("${cli}", self())
         },
         hints: hints(PROMPT_MISCONCEPTIONS),
+      }
+      commands["autoname"] = {
+        name: "autoname",
+        description: "rename session automatically with 2-5 words summary",
+        source: "command",
+        template: PROMPT_AUTONAME,
+        hints: hints(PROMPT_AUTONAME),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

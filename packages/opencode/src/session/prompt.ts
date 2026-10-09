@@ -1477,6 +1477,24 @@ const layer = Layer.effect(
         parts,
         variant: input.variant,
       })
+
+      if (input.command === "autoname") {
+        for (const part of result.parts) {
+          if (part.type === "text" && typeof part.text === "string") {
+            const text = part.text
+            const match = text.match(/RENAMED:\s*(.+)/)
+            if (match && match[1]) {
+              const title = match[1].trim().split("\n")[0].trim()
+              if (title) {
+                yield* sessions.setTitle({ sessionID: input.sessionID, title }).pipe(
+                  Effect.catchCause((cause) => Effect.logError("autoname setTitle failed", { cause: Cause.squash(cause) }))
+                )
+              }
+            }
+          }
+        }
+      }
+
       yield* events.publish(Command.Event.Executed, {
         name: input.command,
         sessionID: input.sessionID,
