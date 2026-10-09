@@ -179,6 +179,26 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
+          // These denies are what stop hint mode from changing files. They have to
+          // come after the user's own config, or edit: "allow" there would turn
+          // file changes back on. Write and apply_patch follow the edit flag.
+          hint: {
+            name: "hint",
+            description: "Hint mode. Each hint gets more specific, up to level 5, and cannot change files.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              user,
+              Permission.fromConfig({
+                question: "allow",
+                edit: "deny",
+                bash: "deny",
+                task: "deny",
+              }),
+            ),
+            mode: "primary",
+            native: true,
+          },
           general: {
             name: "general",
             description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,

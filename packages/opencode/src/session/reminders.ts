@@ -9,6 +9,7 @@ import { PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import PROMPT_PLAN from "./prompt/plan.txt"
+import PROMPT_HINT from "./prompt/hint.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
 
@@ -22,6 +23,25 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const sessions = yield* Session.Service
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
+
+  // This text only shapes the reply. It does not turn tools off. The level is
+  // the number saved on the session. Each hint adds one, up to 5.
+  if (input.agent.name === "hint") {
+    const level = bumpedHintLevel(input.session, userMessage.info.id)
+    yield* sessions.setMetadata({
+      sessionID: input.session.id,
+      metadata: { ...input.session.metadata, hintLevel: level, hintMessageID: userMessage.info.id },
+    })
+    input.session.metadata = { ...input.session.metadata, hintLevel: level, hintMessageID: userMessage.info.id }
+    userMessage.parts.push({
+      id: PartID.ascending(),
+      messageID: userMessage.info.id,
+      sessionID: userMessage.info.sessionID,
+      type: "text",
+      text: PROMPT_HINT.replaceAll("${level}", String(level)),
+      synthetic: true,
+    })
+  }
 
   if (!flags.experimentalPlanMode) {
     if (input.agent.name === "plan") {
@@ -88,5 +108,25 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   userMessage.parts.push(part)
   return input.messages
 })
+
+// Leaving hint mode sets hintLevel back to 0. The message id stops a later
+// tool step of the same hint from adding another level.
+const maxHintLevel = 5
+
+function bumpedHintLevel(session: Session.Info, messageID: string) {
+  if (session.metadata?.hintMessageID === messageID) {
+    const current = session.metadata.hintLevel
+    if (typeof current === "number" && current >= 1) return Math.min(current, maxHintLevel)
+  }
+  const previous = session.metadata?.hintLevel
+  const level = typeof previous === "number" ? previous : 0
+  return Math.min(Math.max(level, 0) + 1, maxHintLevel)
+}
+
+export function label(session?: Session.Info) {
+  const level = session?.metadata?.hintLevel
+  const shown = typeof level === "number" ? Math.min(Math.max(level, 1), maxHintLevel) : 1
+  return `Hint level ${shown} of ${maxHintLevel}`
+}
 
 export * as SessionReminders from "./reminders"
