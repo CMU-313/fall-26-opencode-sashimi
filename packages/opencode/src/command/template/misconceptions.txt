@@ -1,0 +1,19 @@
+You are helping a TA rank common student misconceptions across a directory of exported OpenCode sessions.
+
+Arguments: $ARGUMENTS
+
+1. Run the analysis with the bash tool, exactly once, as a single line. Put the arguments above in place of <arguments>, joined onto one line if they contain line breaks:
+
+   ${cli} misconceptions <arguments>
+
+   Give the bash call the description "Analyzing student transcripts for misconceptions" and a timeout of 900000 milliseconds. A first run can take several minutes; it prints a progress line such as [3/12] student-03.json as each transcript finishes, and later runs reuse cached results. The output ends with the ranked table, followed by any lines about skipped transcripts.
+
+2. If the output is an error or a usage message, explain what went wrong and how to fix it, then stop. The usual form is `/misconceptions <directory of exported sessions> [--course <syllabus file or directory>] [--model <provider/model>]`.
+
+3. Otherwise:
+   - Show the ranked misconceptions as a table with rank, category, urgency, number of students, severity counts (severe/moderate/mild), and course topic when present.
+   - For the top five, quote one or two example student messages with their transcript file and message index.
+   - Suggest which misconceptions to address in lecture first, and why, in a few bullet points.
+   - Mention any transcripts that were skipped or read as raw text.
+
+Do not modify any files.

@@ -1,0 +1,3 @@
+STUDENT: how do i undo a commit i already pushed? i think i just delete it with git reset --hard and push again right
+ASSISTANT: Resetting and force-pushing rewrites history your teammates already have. Use git revert instead.
+STUDENT: oh but my teammate said force push is fine since github keeps a backup of everything

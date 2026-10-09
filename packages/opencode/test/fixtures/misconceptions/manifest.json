@@ -1,0 +1,398 @@
+{
+  "student-01.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 34,
+    "ids": []
+  },
+  "student-02.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 40,
+    "ids": []
+  },
+  "student-03.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 33,
+    "ids": []
+  },
+  "student-04.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 68,
+    "ids": []
+  },
+  "student-05.json": {
+    "kind": "original",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 49,
+    "ids": []
+  },
+  "student-06.json": {
+    "kind": "original",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 47,
+    "ids": []
+  },
+  "student-07.json": {
+    "kind": "original",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 44,
+    "ids": []
+  },
+  "student-08.json": {
+    "kind": "original",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 40,
+    "ids": []
+  },
+  "student-09.json": {
+    "kind": "original",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 87,
+    "ids": []
+  },
+  "student-10.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 59,
+    "ids": []
+  },
+  "student-11.json": {
+    "kind": "original",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 57,
+    "ids": []
+  },
+  "student-12.json": {
+    "kind": "original",
+    "turns": 44,
+    "studentMessages": 22,
+    "maxStudentWords": 79,
+    "ids": []
+  },
+  "student-13.json": {
+    "kind": "clean",
+    "turns": 20,
+    "studentMessages": 10,
+    "maxStudentWords": 40,
+    "ids": []
+  },
+  "student-14.json": {
+    "kind": "terse",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 8,
+    "ids": [
+      "M02"
+    ]
+  },
+  "student-15.json": {
+    "kind": "long",
+    "turns": 56,
+    "studentMessages": 28,
+    "maxStudentWords": 31,
+    "ids": [
+      "M01",
+      "M07",
+      "M11"
+    ]
+  },
+  "student-16.json": {
+    "kind": "very-long",
+    "turns": 100,
+    "studentMessages": 50,
+    "maxStudentWords": 39,
+    "ids": [
+      "M03",
+      "M06",
+      "M13",
+      "M17"
+    ]
+  },
+  "student-17.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 84,
+    "ids": [
+      "M04",
+      "M16"
+    ]
+  },
+  "student-18.json": {
+    "kind": "short",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 19,
+    "ids": [
+      "M05"
+    ]
+  },
+  "student-19.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 54,
+    "ids": [
+      "M09",
+      "M20"
+    ]
+  },
+  "student-20.json": {
+    "kind": "normal",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 38,
+    "ids": [
+      "M10",
+      "M11"
+    ]
+  },
+  "student-21.json": {
+    "kind": "clean",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 44,
+    "ids": []
+  },
+  "student-22.json": {
+    "kind": "terse",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 8,
+    "ids": [
+      "M06"
+    ]
+  },
+  "student-23.json": {
+    "kind": "long",
+    "turns": 56,
+    "studentMessages": 28,
+    "maxStudentWords": 37,
+    "ids": [
+      "M12",
+      "M17",
+      "M19"
+    ]
+  },
+  "student-24.json": {
+    "kind": "short",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 30,
+    "ids": [
+      "M14",
+      "M13"
+    ]
+  },
+  "student-25.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 49,
+    "ids": [
+      "M15",
+      "M07"
+    ]
+  },
+  "student-26.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 39,
+    "ids": [
+      "M18",
+      "M12"
+    ]
+  },
+  "student-27.json": {
+    "kind": "short",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 33,
+    "ids": [
+      "M16"
+    ]
+  },
+  "student-28.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 57,
+    "ids": [
+      "M08",
+      "M01"
+    ]
+  },
+  "student-29.json": {
+    "kind": "clean",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 38,
+    "ids": []
+  },
+  "student-30.json": {
+    "kind": "terse",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 10,
+    "ids": [
+      "M10"
+    ]
+  },
+  "student-31.json": {
+    "kind": "long",
+    "turns": 60,
+    "studentMessages": 30,
+    "maxStudentWords": 38,
+    "ids": [
+      "M02",
+      "M03",
+      "M04",
+      "M05"
+    ]
+  },
+  "student-32.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 25,
+    "ids": [
+      "M19",
+      "M11"
+    ]
+  },
+  "student-33.json": {
+    "kind": "normal",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 50,
+    "ids": [
+      "M20"
+    ]
+  },
+  "student-34.json": {
+    "kind": "short",
+    "turns": 6,
+    "studentMessages": 3,
+    "maxStudentWords": 27,
+    "ids": [
+      "M08",
+      "M14"
+    ]
+  },
+  "student-35.json": {
+    "kind": "short",
+    "turns": 10,
+    "studentMessages": 5,
+    "maxStudentWords": 108,
+    "ids": [
+      "M12",
+      "M09"
+    ]
+  },
+  "student-36.json": {
+    "kind": "normal",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 36,
+    "ids": [
+      "M14",
+      "M13"
+    ]
+  },
+  "student-37.json": {
+    "kind": "clean",
+    "turns": 16,
+    "studentMessages": 8,
+    "maxStudentWords": 28,
+    "ids": []
+  },
+  "student-38.json": {
+    "kind": "terse",
+    "turns": 12,
+    "studentMessages": 6,
+    "maxStudentWords": 11,
+    "ids": [
+      "M07",
+      "M15"
+    ]
+  },
+  "student-39.json": {
+    "kind": "long",
+    "turns": 58,
+    "studentMessages": 29,
+    "maxStudentWords": 33,
+    "ids": [
+      "M18",
+      "M16",
+      "M17"
+    ]
+  },
+  "student-40.json": {
+    "kind": "very-long",
+    "turns": 104,
+    "studentMessages": 52,
+    "maxStudentWords": 43,
+    "ids": [
+      "M01",
+      "M09",
+      "M20",
+      "M06"
+    ]
+  },
+  "student-41.json": {
+    "kind": "short",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 37,
+    "ids": [
+      "M19",
+      "M10"
+    ]
+  },
+  "student-42.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 57,
+    "ids": [
+      "M15",
+      "M05"
+    ]
+  },
+  "student-43.json": {
+    "kind": "normal",
+    "turns": 14,
+    "studentMessages": 7,
+    "maxStudentWords": 44,
+    "ids": [
+      "M02",
+      "M18",
+      "M03"
+    ]
+  },
+  "student-44.json": {
+    "kind": "short",
+    "turns": 8,
+    "studentMessages": 4,
+    "maxStudentWords": 25,
+    "ids": [
+      "M04",
+      "M08"
+    ]
+  }
+}

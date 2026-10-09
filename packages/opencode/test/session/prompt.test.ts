@@ -1816,6 +1816,25 @@ unix(
   30_000,
 )
 
+it.instance(
+  "quiet built-in commands show what was typed and send the prompt as synthetic text",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, sessions, chat } = yield* boot()
+      yield* llm.text("done")
+
+      yield* prompt.command({ sessionID: chat.id, command: "misconceptions", arguments: "sessions --model a/b" })
+
+      const user = (yield* sessions.messages({ sessionID: chat.id })).find((message) => message.info.role === "user")
+      const texts = (user?.parts ?? []).filter((part) => part.type === "text")
+      expect(texts.filter((part) => !part.synthetic).map((part) => part.text)).toEqual(["/misconceptions sessions --model a/b"])
+      expect(texts.some((part) => part.synthetic && part.text.includes("misconceptions <arguments>"))).toBe(true)
+      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("misconceptions <arguments>")
+    }),
+  30_000,
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>

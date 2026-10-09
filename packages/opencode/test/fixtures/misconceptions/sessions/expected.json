@@ -1,0 +1,538 @@
+{
+  "student-01.json": [
+    {
+      "description": "Believes git pull only downloads changes without merging them",
+      "depth": "moderate"
+    },
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "severe"
+    }
+  ],
+  "student-02.json": [
+    {
+      "description": "Believes rebasing and force-pushing a shared branch is harmless",
+      "depth": "severe"
+    },
+    {
+      "description": "Resolves a merge conflict by deleting the teammate's side, thinking git is buggy",
+      "depth": "moderate"
+    }
+  ],
+  "student-03.json": [
+    {
+      "description": "Thinks adding an already-committed file to .gitignore untracks it",
+      "depth": "mild"
+    }
+  ],
+  "student-04.json": [
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "moderate"
+    },
+    {
+      "description": "Thinks async functions run in parallel on separate threads and forgets to await",
+      "depth": "severe"
+    }
+  ],
+  "student-05.json": [
+    {
+      "description": "Concludes CI is broken because tests pass locally",
+      "depth": "severe"
+    },
+    {
+      "description": "Thinks a flaky test should just be retried until it passes",
+      "depth": "moderate"
+    }
+  ],
+  "student-06.json": [
+    {
+      "description": "Cannot tell unit from integration tests and mocks every dependency in an integration test",
+      "depth": "moderate"
+    },
+    {
+      "description": "Believes git pull only downloads changes without merging them",
+      "depth": "mild"
+    }
+  ],
+  "student-07.json": [
+    {
+      "description": "Believes TypeScript types are checked at runtime and reject bad API input",
+      "depth": "severe"
+    },
+    {
+      "description": "Thinks a clean linter run means there are no bugs",
+      "depth": "mild"
+    }
+  ],
+  "student-08.json": [
+    {
+      "description": "Writes user stories as implementation tasks, confusing requirements with design",
+      "depth": "moderate"
+    },
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "mild"
+    }
+  ],
+  "student-09.json": [
+    {
+      "description": "Forgets to await and believes async/await runs code on separate threads",
+      "depth": "moderate"
+    },
+    {
+      "description": "Force-pushes a rebased shared branch thinking it is harmless",
+      "depth": "moderate"
+    }
+  ],
+  "student-10.json": [
+    {
+      "description": "Assumes a major version bump is backward compatible under semantic versioning",
+      "depth": "moderate"
+    },
+    {
+      "description": "Thinks a caret range like ^2.1.0 pins the exact version",
+      "depth": "mild"
+    }
+  ],
+  "student-11.json": [
+    {
+      "description": "Resolves merge conflicts by taking 'ours' everywhere, believing conflicts mean someone made a mistake",
+      "depth": "severe"
+    },
+    {
+      "description": "Retries a flaky test until it passes",
+      "depth": "mild"
+    }
+  ],
+  "student-12.json": [
+    {
+      "description": "Thinks CI runs on their own laptop",
+      "depth": "moderate"
+    },
+    {
+      "description": "Thinks a red CI check can be ignored when tests pass locally",
+      "depth": "severe"
+    }
+  ],
+  "student-13.json": [],
+  "student-14.json": [
+    {
+      "description": "Believes git pull only downloads changes without merging them",
+      "depth": "moderate",
+      "id": "M02",
+      "messageIndex": 4
+    }
+  ],
+  "student-15.json": [
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "severe",
+      "id": "M01",
+      "messageIndex": 12
+    },
+    {
+      "description": "Concludes CI is broken because the tests pass on their own machine",
+      "depth": "moderate",
+      "id": "M07",
+      "messageIndex": 24
+    },
+    {
+      "description": "Thinks a clean linter run means the code has no bugs",
+      "depth": "mild",
+      "id": "M11",
+      "messageIndex": 32
+    }
+  ],
+  "student-16.json": [
+    {
+      "description": "Believes rebasing and force-pushing a shared branch is harmless",
+      "depth": "severe",
+      "id": "M03",
+      "messageIndex": 6
+    },
+    {
+      "description": "Thinks async/await runs code on separate threads and forgets to await promises",
+      "depth": "moderate",
+      "id": "M06",
+      "messageIndex": 24
+    },
+    {
+      "description": "Assumes a major version bump is backward compatible under semantic versioning",
+      "depth": "mild",
+      "id": "M13",
+      "messageIndex": 50
+    },
+    {
+      "description": "Treats code review as a formality and approves without reading the diff",
+      "depth": "mild",
+      "id": "M17",
+      "messageIndex": 76
+    }
+  ],
+  "student-17.json": [
+    {
+      "description": "Resolves merge conflicts by taking one side wholesale, believing a conflict means someone made a mistake",
+      "depth": "severe",
+      "id": "M04",
+      "messageIndex": 8
+    },
+    {
+      "description": "Thinks git commit sends changes to GitHub, confusing commit with push",
+      "depth": "mild",
+      "id": "M16",
+      "messageIndex": 0
+    }
+  ],
+  "student-18.json": [
+    {
+      "description": "Thinks adding an already-committed file to .gitignore untracks it",
+      "depth": "mild",
+      "id": "M05",
+      "messageIndex": 0
+    }
+  ],
+  "student-19.json": [
+    {
+      "description": "Cannot tell unit from integration tests and mocks every dependency in an integration test",
+      "depth": "moderate",
+      "id": "M09",
+      "messageIndex": 0
+    },
+    {
+      "description": "Writes a test that asserts on a mock of the function under test instead of the function itself",
+      "depth": "severe",
+      "id": "M20",
+      "messageIndex": 8
+    }
+  ],
+  "student-20.json": [
+    {
+      "description": "Believes TypeScript types are checked at runtime and reject bad input",
+      "depth": "severe",
+      "id": "M10",
+      "messageIndex": 4
+    },
+    {
+      "description": "Thinks a clean linter run means the code has no bugs",
+      "depth": "mild",
+      "id": "M11",
+      "messageIndex": 6
+    }
+  ],
+  "student-21.json": [],
+  "student-22.json": [
+    {
+      "description": "Thinks async/await runs code on separate threads and forgets to await promises",
+      "depth": "severe",
+      "id": "M06",
+      "messageIndex": 6
+    }
+  ],
+  "student-23.json": [
+    {
+      "description": "Writes user stories as implementation tasks, confusing requirements with design",
+      "depth": "moderate",
+      "id": "M12",
+      "messageIndex": 0
+    },
+    {
+      "description": "Treats code review as a formality and approves without reading the diff",
+      "depth": "moderate",
+      "id": "M17",
+      "messageIndex": 16
+    },
+    {
+      "description": "Thinks committing secrets or .env files is fine because the repository is private",
+      "depth": "severe",
+      "id": "M19",
+      "messageIndex": 32
+    }
+  ],
+  "student-24.json": [
+    {
+      "description": "Thinks a caret range like ^2.1.0 pins the exact version",
+      "depth": "mild",
+      "id": "M14",
+      "messageIndex": 0
+    },
+    {
+      "description": "Assumes a major version bump is backward compatible under semantic versioning",
+      "depth": "moderate",
+      "id": "M13",
+      "messageIndex": 4
+    }
+  ],
+  "student-25.json": [
+    {
+      "description": "Thinks CI runs on their own laptop",
+      "depth": "moderate",
+      "id": "M15",
+      "messageIndex": 0
+    },
+    {
+      "description": "Concludes CI is broken because the tests pass on their own machine",
+      "depth": "severe",
+      "id": "M07",
+      "messageIndex": 8
+    }
+  ],
+  "student-26.json": [
+    {
+      "description": "Thinks switching git branches permanently discards uncommitted work",
+      "depth": "severe",
+      "id": "M18",
+      "messageIndex": 4
+    },
+    {
+      "description": "Writes user stories as implementation tasks, confusing requirements with design",
+      "depth": "mild",
+      "id": "M12",
+      "messageIndex": 8
+    }
+  ],
+  "student-27.json": [
+    {
+      "description": "Thinks git commit sends changes to GitHub, confusing commit with push",
+      "depth": "moderate",
+      "id": "M16",
+      "messageIndex": 0
+    }
+  ],
+  "student-28.json": [
+    {
+      "description": "Thinks a flaky test should be retried until it passes",
+      "depth": "moderate",
+      "id": "M08",
+      "messageIndex": 0
+    },
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "mild",
+      "id": "M01",
+      "messageIndex": 6
+    }
+  ],
+  "student-29.json": [],
+  "student-30.json": [
+    {
+      "description": "Believes TypeScript types are checked at runtime and reject bad input",
+      "depth": "moderate",
+      "id": "M10",
+      "messageIndex": 2
+    }
+  ],
+  "student-31.json": [
+    {
+      "description": "Believes git pull only downloads changes without merging them",
+      "depth": "mild",
+      "id": "M02",
+      "messageIndex": 10
+    },
+    {
+      "description": "Believes rebasing and force-pushing a shared branch is harmless",
+      "depth": "moderate",
+      "id": "M03",
+      "messageIndex": 22
+    },
+    {
+      "description": "Resolves merge conflicts by taking one side wholesale, believing a conflict means someone made a mistake",
+      "depth": "moderate",
+      "id": "M04",
+      "messageIndex": 36
+    },
+    {
+      "description": "Thinks adding an already-committed file to .gitignore untracks it",
+      "depth": "mild",
+      "id": "M05",
+      "messageIndex": 50
+    }
+  ],
+  "student-32.json": [
+    {
+      "description": "Thinks committing secrets or .env files is fine because the repository is private",
+      "depth": "moderate",
+      "id": "M19",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks a clean linter run means the code has no bugs",
+      "depth": "moderate",
+      "id": "M11",
+      "messageIndex": 8
+    }
+  ],
+  "student-33.json": [
+    {
+      "description": "Writes a test that asserts on a mock of the function under test instead of the function itself",
+      "depth": "severe",
+      "id": "M20",
+      "messageIndex": 2
+    }
+  ],
+  "student-34.json": [
+    {
+      "description": "Thinks a flaky test should be retried until it passes",
+      "depth": "mild",
+      "id": "M08",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks a caret range like ^2.1.0 pins the exact version",
+      "depth": "mild",
+      "id": "M14",
+      "messageIndex": 2
+    }
+  ],
+  "student-35.json": [
+    {
+      "description": "Writes user stories as implementation tasks, confusing requirements with design",
+      "depth": "severe",
+      "id": "M12",
+      "messageIndex": 0
+    },
+    {
+      "description": "Cannot tell unit from integration tests and mocks every dependency in an integration test",
+      "depth": "mild",
+      "id": "M09",
+      "messageIndex": 6
+    }
+  ],
+  "student-36.json": [
+    {
+      "description": "Thinks a caret range like ^2.1.0 pins the exact version",
+      "depth": "moderate",
+      "id": "M14",
+      "messageIndex": 0
+    },
+    {
+      "description": "Assumes a major version bump is backward compatible under semantic versioning",
+      "depth": "severe",
+      "id": "M13",
+      "messageIndex": 8
+    }
+  ],
+  "student-37.json": [],
+  "student-38.json": [
+    {
+      "description": "Concludes CI is broken because the tests pass on their own machine",
+      "depth": "moderate",
+      "id": "M07",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks CI runs on their own laptop",
+      "depth": "mild",
+      "id": "M15",
+      "messageIndex": 2
+    }
+  ],
+  "student-39.json": [
+    {
+      "description": "Thinks switching git branches permanently discards uncommitted work",
+      "depth": "moderate",
+      "id": "M18",
+      "messageIndex": 16
+    },
+    {
+      "description": "Thinks git commit sends changes to GitHub, confusing commit with push",
+      "depth": "mild",
+      "id": "M16",
+      "messageIndex": 22
+    },
+    {
+      "description": "Treats code review as a formality and approves without reading the diff",
+      "depth": "severe",
+      "id": "M17",
+      "messageIndex": 28
+    }
+  ],
+  "student-40.json": [
+    {
+      "description": "Believes 100% test coverage means the code has no bugs",
+      "depth": "moderate",
+      "id": "M01",
+      "messageIndex": 44
+    },
+    {
+      "description": "Cannot tell unit from integration tests and mocks every dependency in an integration test",
+      "depth": "severe",
+      "id": "M09",
+      "messageIndex": 20
+    },
+    {
+      "description": "Writes a test that asserts on a mock of the function under test instead of the function itself",
+      "depth": "moderate",
+      "id": "M20",
+      "messageIndex": 58
+    },
+    {
+      "description": "Thinks async/await runs code on separate threads and forgets to await promises",
+      "depth": "mild",
+      "id": "M06",
+      "messageIndex": 8
+    }
+  ],
+  "student-41.json": [
+    {
+      "description": "Thinks committing secrets or .env files is fine because the repository is private",
+      "depth": "mild",
+      "id": "M19",
+      "messageIndex": 0
+    },
+    {
+      "description": "Believes TypeScript types are checked at runtime and reject bad input",
+      "depth": "mild",
+      "id": "M10",
+      "messageIndex": 2
+    }
+  ],
+  "student-42.json": [
+    {
+      "description": "Thinks CI runs on their own laptop",
+      "depth": "severe",
+      "id": "M15",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks adding an already-committed file to .gitignore untracks it",
+      "depth": "moderate",
+      "id": "M05",
+      "messageIndex": 6
+    }
+  ],
+  "student-43.json": [
+    {
+      "description": "Believes git pull only downloads changes without merging them",
+      "depth": "mild",
+      "id": "M02",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks switching git branches permanently discards uncommitted work",
+      "depth": "mild",
+      "id": "M18",
+      "messageIndex": 4
+    },
+    {
+      "description": "Believes rebasing and force-pushing a shared branch is harmless",
+      "depth": "moderate",
+      "id": "M03",
+      "messageIndex": 8
+    }
+  ],
+  "student-44.json": [
+    {
+      "description": "Resolves merge conflicts by taking one side wholesale, believing a conflict means someone made a mistake",
+      "depth": "mild",
+      "id": "M04",
+      "messageIndex": 0
+    },
+    {
+      "description": "Thinks a flaky test should be retried until it passes",
+      "depth": "severe",
+      "id": "M08",
+      "messageIndex": 4
+    }
+  ]
+}
