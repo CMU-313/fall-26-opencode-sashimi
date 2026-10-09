@@ -405,9 +405,9 @@ function repeats(a: Finding, b: Finding) {
   return normalize(a.description) === normalize(b.description)
 }
 
-type Llm = Effect.Success<ReturnType<typeof connect>>
+export type Llm = Effect.Success<ReturnType<typeof connect>>
 
-const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string | undefined) {
+export const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string | undefined) {
   const provider = yield* Provider.Service
   const config = yield* Config.Service
   const ref = model ? Provider.parseModel(model) : yield* provider.defaultModel().pipe(Effect.orDie)
@@ -450,7 +450,7 @@ const connect = Effect.fn("Cli.misconceptions.connect")(function* (model: string
   }
 })
 
-const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, file: string, cache: string, verify: boolean) {
+export const analyze = Effect.fn("Cli.misconceptions.analyze")(function* (llm: Llm, file: string, cache: string, verify: boolean) {
   const turns = shrink(yield* Effect.promise(() => Bun.file(file).text()))
   if (!turns) return yield* Effect.fail(new Error("not a valid `opencode export` file"))
   // A transcript where the student never wrote anything has nothing to analyze, so it costs no model call.
@@ -526,7 +526,7 @@ export function severity(input: { cited: readonly number[]; acted: boolean; dept
   return repeated ? "severe" : input.depth
 }
 
-const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, course: string, cache: string) {
+export const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, course: string, cache: string) {
   // Saved outlines are reused as-is so a TA can correct topic importance by editing the file.
   const saved = path.join(cache, "topics.json")
   const existing = decodeTopics(yield* Effect.promise(() => Bun.file(saved).text().catch(() => "")))
@@ -559,7 +559,7 @@ const outline = Effect.fn("Cli.misconceptions.outline")(function* (llm: Llm, cou
   return result.topics
 })
 
-const merge = Effect.fn("Cli.misconceptions.merge")(function* (
+export const merge = Effect.fn("Cli.misconceptions.merge")(function* (
   llm: Llm,
   findings: readonly Finding[],
   topics: readonly Topic[] | undefined,
