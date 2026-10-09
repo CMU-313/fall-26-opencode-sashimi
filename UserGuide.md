@@ -91,3 +91,45 @@ Looking at the acceptance criterion, we can see it is all tested
 - The ReadTool integration test exercises an actual registered tool call and proves it does not read before the permission assertion is released.
 - The Playwright tests exercise the rendered dock and approval interaction in a browser, but use a mocked API request. They do not currently run one live tool call all the way through the server and browser UI in a single test.
 - Manual testing remains useful for verifying real provider/tool behavior across every tool and checking how long resource patterns are presented in the running app.
+## Misconceptions feature (mdarin)
+### How to use the feature
+- This feature is for TAs and instructors. It reads a folder of exported OpenCode sessions, lists what each student misunderstood, groups the same misconception across students, and ranks the groups by urgency so the most common and most severe ones can be addressed in lecture.
+- Each student exports a session with `opencode export <session-id> > <name>.json` and sends the file to the TA, who puts all of them in one folder.
+- From the terminal, run `opencode misconceptions <folder> --model <provider/model>` (from a source checkout: `bun dev misconceptions ...` at the repo root). The model must be one you have a key for; OpenCode's free models reject calls from a source build.
+- `--course <syllabus.md or folder of .md/.txt>` weights each group by how central its topic is to the course (core ×3, supporting ×2, peripheral ×1). `--json` prints the result as JSON, including each transcript's findings. `--no-verify` skips the second extraction pass (see below).
+- Extraction runs in two stages: the model first lists candidate misconceptions from chunks of the conversation, then a second call checks each candidate against the whole conversation, drops the ones it does not support, and records every student message where the misconception recurs. A misconception the student repeats after the assistant has corrected it is rated severe.
+- The output is a ranked table: group name, urgency score, how many students had it, severity counts (severe/moderate/mild), the course topic, and up to two student quotes with the transcript file and message index so the exact message can be opened. The same table is saved to `<folder>/misconceptions-ranking.txt`.
+- Results are cached per transcript in `<folder>/.misconceptions/`, so rerunning only analyzes new or changed transcripts. With `--course`, the topic list is saved to `.misconceptions/topics.json`; edit it to adjust a topic's importance, or delete it to regenerate.
+- From the TUI, type `/misconceptions <folder> [--course ...] [--model ...]`. It runs the same analysis with live progress and summarizes the ranking with suggestions for what to cover first. Only the typed command shows in the chat.
+
+### How to manually test it
+- Sample transcripts are in `packages/opencode/test/fixtures/misconceptions/sessions`: 44 generated student sessions from 6 to 104 messages (including sessions with no misconceptions, terse students, and long sessions whose topic drifts), plus two malformed files. `course.md` is a sample syllabus and `manifest.json` lists each session's kind and length.
+- From the repo root: `bun dev misconceptions packages/opencode/test/fixtures/misconceptions/sessions --course packages/opencode/test/fixtures/misconceptions/course.md --model <provider/model>`. Check that a progress line prints per file, the two malformed files are reported as skipped, the table ranks groups such as "100% coverage means no bugs", "force-pushing a shared branch" and "ignoring red CI" near the top, each quote names a file and message, and `misconceptions-ranking.txt` appears in the folder.
+- Run it again: it finishes in seconds with no model calls, because of the cache.
+- Open `.misconceptions/topics.json`, change a topic to `peripheral`, rerun, and check its groups drop in the ranking.
+- Run with `--no-verify` and compare: the single pass reports more findings, including some in the sessions that have none (`student-13`, `-21`, `-29`, `-37`).
+- Start the TUI (`bun dev --model <provider/model>`), type `/misconceptions <same arguments>`, and check that only the command shows, progress lines appear, then a table and lecture suggestions.
+
+### Written tests for this feature
+#### Location of tests
+- `packages/opencode/test/cli/misconceptions/transcript.test.ts` has unit tests for reading export files and splitting long transcripts into pieces that fit the model.
+- `packages/opencode/test/cli/misconceptions/ranking.test.ts` has unit tests for locating the quoted message, dedupe, the urgency ranking, and the table.
+- `packages/opencode/test/cli/misconceptions/verify.test.ts` has unit tests for applying the second-pass reply and the severity rule.
+- `packages/opencode/test/cli/misconceptions/cli.test.ts` has end-to-end tests that spawn the real `opencode misconceptions` binary in an isolated home directory against a fake model server.
+- `packages/opencode/test/command/misconceptions.test.ts` has integration tests for the `/misconceptions` command through the real command service, and an end-to-end check that the shell command it generates starts OpenCode from another directory.
+- `packages/opencode/test/session/prompt.test.ts` ("quiet built-in commands") checks that the command's prompt is hidden in the chat.
+
+#### What's being tested
+- Export files are reduced to what the student and assistant wrote: tool output, reasoning and hidden text are dropped, student text is never shortened, assistant text is trimmed, and invalid files are rejected.
+- Long transcripts are split into pieces that each fit the model's budget, cut only between turns, with the previous piece's last turns carried over as context; a single message too long for one piece is split into overlapping parts so nothing at its end is lost.
+- Each quote is tied to the student message it came from, repeats within a transcript are merged keeping the deepest, and the second pass drops unconfirmed candidates, converts cited message numbers to export positions, ignores invalid ids, and raises severity only when the student repeats a misconception after the assistant replied.
+- Ranking counts each student once at their deepest severity, weights by course topic importance, keeps findings the model forgot to group, and orders rows by urgency, then student count, then name; the table prints every line format.
+- The CLI end to end: a directory of exports produces the table or JSON, invalid files and unusable model replies are skipped without stopping the run, every file failing exits non-zero, the ranking is saved to a file, a rerun makes no model requests, editing a transcript or changing the model re-analyzes it, `--course` saves and reuses topics and hand edits change the ranking, and `--no-verify` skips the second pass.
+- The `/misconceptions` command is registered with the right hints, its template runs this same OpenCode, and its prompt is hidden.
+
+#### Why these are sufficient
+- The acceptance criteria in #14 are each covered: a directory of transcripts (CLI tests), an optional course document (`--course` tests), categorizing with severity (extraction, verify and dedupe tests), ranking by an urgency score that accounts for severity (ranking tests), and long-context conversations (splitting tests plus the 104-message sample).
+- Every pure function is tested in isolation, and the end-to-end tests run the real binary exactly as a TA would, with a fake model so they are deterministic and need no network or key.
+- The tests were written from a behavior specification by someone who had not seen the implementation, so they check the specified behavior rather than mirror the code. Running them against 13 deliberately planted bugs (for example "cache ignores the model", "urgency ignores topic weight", "long message cut off instead of split", "second pass never drops anything") caught all 13.
+- What the fake model cannot prove is accuracy. The 44 sample sessions carry labels seeded at generation (`sessions/expected.json`, not human-written); on them the two-stage extraction finds 96% of the seeded misconceptions with 57% precision, versus 99% and 41% for the single pass, and the sessions with no misconceptions go from 16 invented findings to 1. The evaluation harness that measures this is submitted separately.
+- Not automated: the chat model's write-up in the TUI (checked manually, see the recordings) and real-model accuracy on human-labeled transcripts.
