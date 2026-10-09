@@ -2,9 +2,7 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect, Layer } from "effect"
-import os from "os"
 import path from "path"
-import fs from "fs/promises"
 import { Command } from "../../src/command"
 import { provideTmpdirInstance, testInstanceStoreLayer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -46,19 +44,5 @@ describe("/misconceptions command", () => {
       words.slice(1, -1).forEach((word) => expect(word).toStartWith("'--conditions"))
       expect(words.at(-1)).toBe(`'${path.resolve(import.meta.dir, "../../src/index.ts")}'`)
     }),
-  )
-
-  it.live(
-    "self() starts this opencode from another working directory",
-    () =>
-      Effect.promise(async () => {
-        const dir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-misconceptions-self-"))
-        const proc = Bun.spawnSync(["sh", "-c", `${Command.self()} misconceptions --help`], { cwd: dir })
-        await fs.rm(dir, { recursive: true, force: true })
-        const stderr = proc.stderr.toString()
-        expect({ code: proc.exitCode, stderr: proc.exitCode === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" })
-        expect(proc.stdout.toString() + stderr).toContain("misconceptions")
-      }),
-    60_000,
   )
 })

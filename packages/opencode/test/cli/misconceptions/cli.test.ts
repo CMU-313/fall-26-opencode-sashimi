@@ -4,11 +4,13 @@
 // one `Cat-<description>` per description. Verify keeps candidates not in `drop`, citing each block holding its quote.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { EOL } from "os"
+import os, { EOL } from "os"
 import path from "path"
 import fs from "fs/promises"
 import { cliIt, type OpencodeCli } from "../../lib/cli-process"
 import { testProviderConfig } from "../../lib/test-provider"
+import { Command } from "../../../src/command"
+import { it } from "../../lib/effect"
 import { table, type Finding, type Row } from "../../../src/cli/cmd/misconceptions"
 
 // Request kinds by the top-level schema property of the system message, checked in this order.
@@ -353,5 +355,23 @@ describe("opencode misconceptions (subprocess)", () => {
         expect((yield* model.run([...args, "--verify"])).stdout.trim()).toBe(verifiedTable)
       }),
     300_000,
+  )
+})
+
+describe("/misconceptions command (end to end)", () => {
+  // The slash command runs the CLI through the shell words Command.self() produces; this proves those words start
+  // this same opencode from any working directory.
+  it.live(
+    "self() starts this opencode from another working directory",
+    () =>
+      Effect.promise(async () => {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-misconceptions-self-"))
+        const proc = Bun.spawnSync(["sh", "-c", `${Command.self()} misconceptions --help`], { cwd: dir })
+        await fs.rm(dir, { recursive: true, force: true })
+        const stderr = proc.stderr.toString()
+        expect({ code: proc.exitCode, stderr: proc.exitCode === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" })
+        expect(proc.stdout.toString() + stderr).toContain("misconceptions")
+      }),
+    60_000,
   )
 })
