@@ -134,3 +134,40 @@ Looking at the acceptance criterion, we can see it is all tested
 - The prompt tests confirm that the instructions contain the expected title format and word-count requirement.
 - Additionally, the command registry test currently checks the prompt content but does not actually verify that `/autoname` is registered with the correct name, source, and description.
 - Manual testing can verify these user-facing behaviors and the current automated tests provide good coverage of the formatting and title parsing behavior, as the actual command is quite small.
+
+## Hint mode (Harrison-Zoccoli)
+### How to use the feature
+- I added a hint agent for when I am stuck. I switch to it with `tab` until the agent name is `hint`. `shift+tab` goes the other way.
+- I ask the question I am stuck on. The reply starts with `Hint level 1 of 5` and stays vague: one high-level hint, without naming the code change, function, or final result.
+- Each new message I send in hint mode raises the level by one, up to 5. The reply says which level I am on.
+- Level 2 names the area of the code to look at, but not the change. Level 3 names the function or idea, but not the edit. Level 4 describes the approach in concrete terms, but does not write the code. Level 5 is specific about the exact place and the exact idea, and still does not write the solution.
+- A sixth message stays at level 5. Hint mode does not edit files, write files, or run commands. If I ask it to, it should tell me it cannot.
+- When I switch away with `tab` (for example back to build), the saved level goes back to 0. The next time I enter hint mode, the first hint is level 1 again, even if older hint messages are still in the session.
+
+### How to manually test it
+- I start a new OpenCode session.
+- I press `tab` until the agent is `hint`. I send a question about a problem I am stuck on. I confirm the reply shows `Hint level 1 of 5`, gives one vague hint, and does not include the solution or the code.
+- I send four more messages in hint mode. I confirm the label climbs through `Hint level 2 of 5`, `3 of 5`, `4 of 5`, and `5 of 5`, and that each reply is more specific than the last without writing the solution.
+- I send one more message. I confirm it still says `Hint level 5 of 5` and still does not write the code.
+- I ask it to edit or write a file. I confirm it refuses and the project files do not change.
+- I press `tab` until I am on another agent, then `tab` back to `hint`. I send another question. I confirm the reply is `Hint level 1 of 5` again.
+
+### Written tests for this feature
+#### Location of tests
+- `packages/opencode/test/agent/agent.test.ts` checks that the hint agent is a selectable primary agent and that edit, write, apply_patch, bash, and task are denied.
+- `packages/opencode/test/session/hint-reminder.test.ts` checks the hint text and the level saved on the session.
+
+#### What's being tested
+- The first hint is level 1, tells the model to follow only level 1, stays high-level, and does not include a solution or a code fence.
+- A saved level of 2 becomes 3 on the next hint. A saved level of 5 stays at 5, and the prompt still says not to reveal the full solution.
+- Applying the same hint message twice, starting from level 2, stays at 3. Both saves store `hintLevel: 3` and that message's id, so a later step of the same hint does not count as another ask.
+- A session whose saved level is already 0 produces level 1 on the next hint, even when older hint messages are still in the list.
+- A missing level, a stored 0, and a stored 9 all display as a level from 1 to 5. A stored 9 is saved back as 5.
+- A message sent to the build agent does not get hint text, does not change a saved hint level, and does not write hint metadata.
+- The hint agent cannot edit, write, patch, run bash, or start a task.
+
+#### Why these are sufficient
+- My acceptance criteria are that I can switch to hint mode when I am stuck, get a more specific hint on each new ask, never receive the full solution, and be unable to have the agent edit the project. The reminder tests cover the level text and the cap. The agent test covers the permission denies.
+- The level is a number I store on the session, not a count of old messages. The tests check that number directly, including the save through `setMetadata`, the cap at 5, and the same message not raising it twice.
+- I used to reset by ignoring hint messages older than a timestamp I took when I left hint mode, and a message in another mode also reset the streak. That lost a race when the timestamp and the next message were written from different places. I now reset only when I leave hint mode, by storing `hintLevel: 0`. A normal build message does not clear it. The tests cover a session that is already at 0, and that a build message leaves the saved level alone.
+- The line in `packages/tui/src/context/local.tsx` that writes `hintLevel: 0` when I switch away is not covered by a unit test, because it sits inside the TUI agent picker. The manual steps above are how I check that switch, and the visible `Hint level N of 5` line I actually see.
