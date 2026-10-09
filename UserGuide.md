@@ -91,3 +91,46 @@ Looking at the acceptance criterion, we can see it is all tested
 - The ReadTool integration test exercises an actual registered tool call and proves it does not read before the permission assertion is released.
 - The Playwright tests exercise the rendered dock and approval interaction in a browser, but use a mocked API request. They do not currently run one live tool call all the way through the server and browser UI in a single test.
 - Manual testing remains useful for verifying real provider/tool behavior across every tool and checking how long resource patterns are presented in the running app.
+
+## Autoname feature (smao2)
+### How to use this feature
+- Sessions in opencode are automatically named to the date and time that they are created. This makes it very easy to lose track of sessions.
+- Sessions can be renamed as well, but must be done manually.
+- Therefore, if we have an autoname feature that works similarly to how other AI models automatically rename the sessions after the first prompt, we can let the user easily rename the session.
+- To use this, after the first few prompts or even one prompt, the user can use the command /autoname, which will rename the session to a brief 2-5 word summary of the previous chats. This can be used multiple times.
+- The instructions for this are displayed in a .txt file, which is shown as the /autoname command is run.
+
+### How to manually test it
+- Start a new OpenCode session and send a few prompts about a specific topic.
+- Type '/autoname' and run the command using enter. Confirm that the session title changes to a short, relevant 2–5 word summary of the conversation.
+- Continue the conversation with additional prompts and run `/autoname` again. Make sure that the session can be renamed multiple times based on its updated context.
+- Test the command with different types of conversations to check that the generated names accurately summarize their topics.
+- Confirm that the renamed session title appears correctly in the session list and remains after restarting OpenCode, using the /session command or just viewing the sessions through the button to display sessions.
+
+### Written tests for this feature
+#### Location of tests
+- `packages/opencode/test/command/autoname.test.ts` contains tests for the autoname prompt, title extraction, parsing edge cases, simulated session result processing, and command-related behavior.
+- `packages/opencode/test/command/autoname-end2end.test.ts` contains an end to end test for the autoname prompt.
+- `packages/opencode/src/command/template/autoname.txt` contains the prompt instructions used to generate the session title.
+
+#### What's being tested
+- The autoname prompt contains the `RENAMED:` marker, which is used to identify the generated session title.
+- The prompt specifies that generated titles should contain 2–5 words.
+- The `extractRenamedTitle` helper correctly extracts a title from a response containing `RENAMED:`.
+- Only the first title line is extracted when additional text follows the generated title.
+- Responses without a `RENAMED:` marker return `undefined`.
+- Empty or whitespace-only titles return `undefined`.
+- Titles containing punctuation, such as colons and exclamation marks, are extracted correctly.
+- When multiple `RENAMED:` lines appear, only the first matching title is used.
+- Very long titles are extracted without truncation at the parsing stage. Any length restrictions must be handled separately.
+- The autoname prompt has no argument hints, as verified by `hints(PROMPT_AUTONAME)` returning an empty array.
+- Simulated session result processing correctly extracts the generated title from text response parts.
+- Non-text response parts are ignored during title extraction.
+
+#### Why these are sufficient
+- The tests cover the main title extraction logic and several important edge cases without requiring an actual AI response or running the OpenCode interface.
+- The parsing tests verify that the feature can identify a generated title using the `RENAMED:` marker and handle missing, empty, multiline, or unusually long responses.
+- The simulated session tests check that text response parts can be processed correctly while non-text parts are ignored. This helps verify the expected structure of the response-processing logic.
+- The prompt tests confirm that the instructions contain the expected title format and word-count requirement.
+- Additionally, the command registry test currently checks the prompt content but does not actually verify that `/autoname` is registered with the correct name, source, and description.
+- Manual testing can verify these user-facing behaviors and the current automated tests provide good coverage of the formatting and title parsing behavior, as the actual command is quite small.
