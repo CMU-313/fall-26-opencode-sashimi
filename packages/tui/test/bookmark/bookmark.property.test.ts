@@ -16,7 +16,7 @@ import {
   removeBookmark,
   renameBookmark,
   saveBookmarks,
-  toggleBookmark,
+  addBookmark,
   type LocalBookmark,
 } from "../../src/context/local"
 
@@ -73,7 +73,7 @@ const bookmarkList = (minLength = 0) =>
   fc.uniqueArray(bookmark, { selector: (b) => b.id, minLength, maxLength: 20 })
 
 // ---------------------------------------------------------------------------
-// R1 (model/oracle): "A bookmark saves the full text of the response it was
+// R1 (model/oracle and invariant): "A bookmark saves the full text of the response it was
 // made from, and the list shows the start of that text when there's no
 // custom name."
 // ---------------------------------------------------------------------------
@@ -99,6 +99,7 @@ function expectedText(parts: { type: string; text?: string; synthetic?: boolean 
   return visible.join("\n").trim()
 }
 
+// R1 (model/oracle): the saved text is the response's visible text, compared against expectedText.
 test("R1: saved text matches the response's visible text", () => {
   const runs = 300
   fc.assert(
@@ -110,6 +111,7 @@ test("R1: saved text matches the response's visible text", () => {
   report("R1", "model/oracle", runs)
 })
 
+// R1 (invariant): for every unnamed bookmark, the list title is the start of its text.
 test("R1: an unnamed bookmark's title is the start of its text", () => {
   const runs = 300
   fc.assert(
@@ -143,6 +145,7 @@ test("R1: an unnamed bookmark's title is the start of its text", () => {
 // and leaves the response in the chat."
 // ---------------------------------------------------------------------------
 
+// R2 (invariant): removing one bookmark never changes any other bookmark or their order.
 test("R2: removing a bookmark leaves every other bookmark unchanged", () => {
   const runs = 300
   fc.assert(
@@ -178,6 +181,7 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
+// R3 (round-trip): save to a real bookmark.json, load it back, get the same bookmarks.
 test("R3: saving then loading bookmarks returns them unchanged", async () => {
   // Each case writes and reads a real file, so fewer runs than the pure ones.
   const runs = 100
@@ -200,6 +204,7 @@ test("R3: saving then loading bookmarks returns them unchanged", async () => {
 // a second entry, and it tells the user the response is already saved."
 // ---------------------------------------------------------------------------
 
+// R4 (metamorphic): bookmarking a response twice gives the same list as bookmarking it once.
 test("R4: bookmarking twice gives the same list as bookmarking once", () => {
   const runs = 300
   fc.assert(
@@ -208,8 +213,8 @@ test("R4: bookmarking twice gives the same list as bookmarking once", () => {
       const start = items.filter((item) => item.id !== entry.id)
       const { createdAt: _, ...response } = entry
 
-      const once = toggleBookmark(start, response)
-      const twice = toggleBookmark(once.items, response)
+      const once = addBookmark(start, response)
+      const twice = addBookmark(once.items, response)
 
       // Metamorphic relation: a second bookmark of the same response changes nothing...
       expect(twice.items).toEqual(once.items)
@@ -226,6 +231,7 @@ test("R4: bookmarking twice gives the same list as bookmarking once", () => {
 // R5 (round-trip): "Clearing a custom name restores the default snippet title."
 // ---------------------------------------------------------------------------
 
+// R5 (round-trip): rename, then clear the name, and the title is back to the original snippet.
 test("R5: renaming then clearing the name restores the original title", () => {
   const runs = 300
   fc.assert(
