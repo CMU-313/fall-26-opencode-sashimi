@@ -85,14 +85,18 @@ export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
 export function removeBookmark(items: LocalBookmark[], id: string) {
   return items.filter((item) => item.id !== id)
 }
-//If a bookmark with a specific id already exists it is removed, otherwise a new one is created
-//result exists so the correct message is shown depending on whether we are looking at a 
-//current bookmark or a non existing one
-export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
-  const exists = items.some((item) => item.id === entry.id)
+// Bookmarks a response. If that response is already bookmarked, the list is
+// returned unchanged along with the existing bookmark, so the caller can tell
+// the user it's already saved instead of creating a duplicate (R4).
+// (This used to be a toggle that removed the bookmark on a second press; the
+// R4 property found that, and bookmarks are now removed from the list.)
+export function addBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
+  const existing = items.find((item) => item.id === entry.id)
+  if (existing) return { items, result: "exists" as const, existing }
   return {
-    items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
-    result: exists ? ("removed" as const) : ("added" as const),
+    items: [...items, { ...entry, createdAt: Date.now() }],
+    result: "added" as const,
+    existing: undefined,
   }
 }
 
@@ -755,17 +759,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             throw error
           }
         },
-        async toggle(entry: Omit<LocalBookmark, "createdAt">) {
+        async add(entry: Omit<LocalBookmark, "createdAt">) {
           const previous = bookmarkStore.items
-          const { items, result } = toggleBookmark(bookmarkStore.items, entry)
-          setBookmarkStore("items", items)
+          const added = addBookmark(bookmarkStore.items, entry)
+          // Already bookmarked: nothing changed, so there is nothing to save.
+          if (added.result === "exists") return added
+          setBookmarkStore("items", added.items)
           try {
             await save()
           } catch (error) {
             setBookmarkStore("items", previous)
             throw error
           }
-          return result
+          return added
         },
         async rename(id: string, name: string) {
           const previous = bookmarkStore.items

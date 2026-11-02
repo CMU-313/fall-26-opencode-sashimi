@@ -37,7 +37,7 @@ import type {
   ReasoningPart,
   SessionStatus,
 } from "@opencode-ai/sdk/v2"
-import { bookmarkText, useLocal } from "../../context/local"
+import { bookmarkText, bookmarkTitle, useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -963,9 +963,8 @@ export function Session() {
       },
     },
     {
-      title: local.bookmark.has(messagesBeforeRevert().findLast((message) => message.role === "assistant")?.id ?? "")
-        ? "Remove bookmark"
-        : "Bookmark last assistant response",
+      title: "Bookmark last assistant response",
+      // The command id keeps its old name so existing keybind configs still work.
       value: "session.bookmark.toggle",
       category: "Session",
       run: async () => {
@@ -992,16 +991,19 @@ export function Session() {
         }
 
         try {
-          const result = await local.bookmark.toggle({
+          const added = await local.bookmark.add({
             id: lastAssistantMessage.id,
             sessionID: route.sessionID,
             sessionTitle: session()?.title ?? "Untitled session",
             text,
           })
-          toast.show({
-            message: result === "added" ? "Response bookmarked" : "Bookmark removed",
-            variant: "success",
-          })
+          // R4: a second bookmark of the same response says so instead of
+          // removing it. Bookmarks are removed from the list (ctrl d).
+          toast.show(
+            added.result === "added"
+              ? { message: "Response bookmarked", variant: "success" }
+              : { message: `Already bookmarked as "${bookmarkTitle(added.existing)}"`, variant: "info" },
+          )
         } catch (error) {
           toast.show({ message: `Failed to save bookmark: ${errorMessage(error)}`, variant: "error" })
         }

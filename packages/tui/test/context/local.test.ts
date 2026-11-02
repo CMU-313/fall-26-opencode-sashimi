@@ -6,7 +6,7 @@ import {
   removeBookmark,
   renameBookmark,
   sortBookmarks,
-  toggleBookmark,
+  addBookmark,
   type LocalBookmark,
 } from "../../src/context/local"
 
@@ -35,16 +35,17 @@ function makeBookmark(id: string): Omit<LocalBookmark, "createdAt"> {
 }
 
 test("bookmarking a response adds it to the list", () => {
-  const result = toggleBookmark([], makeBookmark("a"))
+  const result = addBookmark([], makeBookmark("a"))
   expect(result.result).toBe("added")
   expect(result.items.map((item) => item.id)).toEqual(["a"])
 })
 
 test("bookmarking the same response twice does not create a duplicate", () => {
-  const first = toggleBookmark([], makeBookmark("a"))
-  const second = toggleBookmark(first.items, makeBookmark("a"))
-  expect(second.result).toBe("removed")
-  expect(second.items).toEqual([])
+  const first = addBookmark([], makeBookmark("a"))
+  const second = addBookmark(first.items, makeBookmark("a"))
+  expect(second.result).toBe("exists")
+  expect(second.existing?.id).toBe("a")
+  expect(second.items).toEqual(first.items)
 })
 
 test("removing a bookmark only removes the matching one, leaving the rest intact", () => {
@@ -94,7 +95,7 @@ test("the saved list shows the newest bookmark first", () => {
 })
 
 test("the saved list no longer shows a bookmark once it's removed", () => {
-  const afterAdd = toggleBookmark([], makeBookmark("a")).items
+  const afterAdd = addBookmark([], makeBookmark("a")).items
   const afterRemove = removeBookmark(afterAdd, "a")
 
   expect(sortBookmarks(afterRemove)).toEqual([])
