@@ -42,6 +42,11 @@
     "@opencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    // Bookmark property tests (P4, afels) live in packages/tui.
+    "@opencode-ai/tui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }
