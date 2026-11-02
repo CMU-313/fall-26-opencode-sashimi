@@ -37,7 +37,7 @@ import type {
   ReasoningPart,
   SessionStatus,
 } from "@opencode-ai/sdk/v2"
-import { useLocal } from "../../context/local"
+import { bookmarkText, useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -984,13 +984,7 @@ export function Session() {
           return
         }
 
-        const parts = sync.data.part[lastAssistantMessage.id] ?? []
-        const textParts = parts.filter((part) => part.type === "text")
-        const text = textParts
-          .filter((part) => !part.synthetic)
-          .map((part) => part.text)
-          .join("\n")
-          .trim()
+        const text = bookmarkText(sync.data.part[lastAssistantMessage.id] ?? [])
         if (!text) {
           toast.show({ message: "No text content found in last assistant message", variant: "error" })
           dialog.clear()

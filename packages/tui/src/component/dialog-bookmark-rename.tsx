@@ -1,9 +1,8 @@
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useDialog } from "../ui/dialog"
-import { useLocal } from "../context/local"
+import { bookmarkTitle, useLocal } from "../context/local"
 import { useToast } from "../ui/toast"
 import { createMemo } from "solid-js"
-import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 
 //This shows the prompt for renaming a bookmark
@@ -20,7 +19,7 @@ export function DialogBookmarkRename(props: DialogBookmarkRenameProps) {
   return (
     <DialogPrompt
       title="Rename Bookmark"
-      value={bookmark()?.name ?? Locale.truncate(bookmark()?.text.replace(/\s+/g, " ").trim() ?? "", 80)}
+      value={bookmark() ? bookmarkTitle(bookmark()!) : ""}
       onConfirm={(value) => {
         //Fills name with truncated response, then allows user to edit from there
         void local.bookmark.rename(props.bookmark, value).catch((error) => {

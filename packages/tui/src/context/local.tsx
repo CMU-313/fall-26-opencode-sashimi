@@ -14,6 +14,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { Locale } from "../util/locale"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -112,6 +113,30 @@ export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: stri
 // ordering can be tested without spinning up the full local context.
 export function sortBookmarks(items: LocalBookmark[]) {
   return items.toSorted((a, b) => b.createdAt - a.createdAt)
+}
+
+// The text a bookmark saves for a response: its visible text parts, in order,
+// joined with newlines. Synthetic parts (added by OpenCode, not written by the
+// model) and non-text parts like tool calls are left out. Pulled out of the
+// bookmark command (routes/session/index.tsx) so R1 can be property-tested.
+export function bookmarkText(parts: ReadonlyArray<{ type: string; text?: string; synthetic?: boolean }>) {
+  return parts
+    .filter((part) => part.type === "text" && !part.synthetic)
+    .map((part) => part.text ?? "")
+    .join("\n")
+    .trim()
+}
+
+// The default title of an unnamed bookmark: the start of its text, with runs
+// of whitespace collapsed to one space, cut to 80 characters.
+export function bookmarkSnippet(text: string) {
+  return Locale.truncate(text.replace(/\s+/g, " ").trim(), 80)
+}
+
+// What the bookmark list shows for a bookmark: its custom name if it has one,
+// otherwise the snippet. Shared by the list and the rename prompt.
+export function bookmarkTitle(bookmark: Pick<LocalBookmark, "name" | "text">) {
+  return bookmark.name || bookmarkSnippet(bookmark.text)
 }
 
 // Reconciles two TUI sessions writing to the same bookmark.json at once.
