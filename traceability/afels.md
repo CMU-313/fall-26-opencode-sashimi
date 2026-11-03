@@ -3,11 +3,11 @@
 **Target feature:** Bookmarking responses in the OpenCode TUI (bookmark the latest response, view the list, rename, remove, jump back to the message).
 
 **Main source files:**
-- `packages/tui/src/context/local.tsx` — bookmark logic (`toggleBookmark`, `removeBookmark`, `renameBookmark`, `loadBookmarks`, `saveBookmarks`, …)
-- `packages/tui/src/util/persistence.ts` — reading and writing `bookmark.json`
-- `packages/tui/src/routes/session/index.tsx` — the "Bookmark last assistant response" command
-- `packages/tui/src/component/dialog-bookmark-list.tsx` — the bookmark list (select, rename, remove)
-- `packages/tui/src/component/dialog-bookmark-rename.tsx` — the rename prompt
+- `packages/tui/src/context/local.tsx`: bookmark logic (`toggleBookmark`, `removeBookmark`, `renameBookmark`, `loadBookmarks`, `saveBookmarks`...)
+- `packages/tui/src/util/persistence.ts`: reading and writing `bookmark.json`
+- `packages/tui/src/routes/session/index.tsx`: the "Bookmark last assistant response" command
+- `packages/tui/src/component/dialog-bookmark-list.tsx`: the bookmark list (select, rename, remove)
+- `packages/tui/src/component/dialog-bookmark-rename.tsx`: the rename prompt
 
 **Property tests:** `packages/tui/test/bookmark/bookmark.property.test.ts`
 
@@ -22,12 +22,8 @@
 | R5 | C-11, S-12, O-12: "deleting the name and closing it should put back the original name" | Clearing a custom name restores the default snippet title. | Rename a bookmark to "what is python", then rename it to an empty or all-spaces name. The title goes back to the same first-80-character snippet it showed before the first rename. | No | **Round-trip:** for an unnamed bookmark and any name, renaming it and then clearing the name gives back the original title. | `R5: renaming then clearing the name restores the original title` |
 | R6 | C-10, S-10, O-11: "the consequence of deleting something is high" | Removing a bookmark from the list asks for confirmation first. | Press ctrl d on a bookmark and a confirmation appears. Cancel and the bookmark is still listed. Repeat and confirm, and it is gone. | No | — (UI dialog; checked by hand) | — |
 
-**AI-generated properties:** The properties for R1 and R3, and R6 (said it should be checked manually) were suggested by Claude. I reviewed each one against its requirement and acceptance criteria.
+**AI-generated properties:** The properties for R1 and R3, and R6 (said it should be checked manually) were suggested by Claude. I reviewed each one by comparing against the requirement and acceptance criteria.
 
 ## Requirement changes
-
-| ID | Original requirement (P3) | Revised requirement | Why it changed |
-|---|---|---|---|
-| — | — | — | — |
 
 No requirements changed. Each requirement is buildable as written. R1, R2, R3 and R5 already hold in the current code, R4 needs only a change to the bookmark command so a second press reports "already bookmarked" instead of removing the bookmark, and R6 can use the confirmation dialog OpenCode uses.
