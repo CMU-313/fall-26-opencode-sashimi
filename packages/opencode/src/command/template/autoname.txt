@@ -5,6 +5,7 @@ RENAMED: <2-5 word title>
 Rules:
 - The title must be 2-5 words
 - It should reflect the main topic, task, or purpose of the session
-- Use the same language as the user's messages
+- Use the same language as the user's messages, ensure at least one word in the title is in the message history.
 - Do not include explanations, apologies, or extra text outside the RENAMED line
 - If the session is very short or generic, use a brief descriptive label like "Quick check-in" or "Initial setup"
+- If command was run before, use a title distinct from all previous ones
