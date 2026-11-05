@@ -79,9 +79,15 @@ export type ToolProps<T = Tool.Info> = {
   frame: ToolFrame
 }
 
+type ToolPermissionMetadata<T> = Partial<Tool.InferMetadata<T>> & {
+  operation?: "write"
+  exists?: boolean
+  lineCount?: number
+}
+
 type ToolPermissionProps<T = Tool.Info> = {
   input: Partial<Tool.InferParameters<T>>
-  metadata: Partial<Tool.InferMetadata<T>>
+  metadata: ToolPermissionMetadata<T>
   patterns: string[]
 }
 
@@ -920,11 +926,18 @@ function scrollWebSearchStart(p: ToolProps<typeof WebSearchTool>): string {
 function permEdit(p: ToolPermissionProps<typeof EditTool>): ToolPermissionInfo {
   const input = p.input as { filePath?: string; filepath?: string; diff?: string }
   const file = input.filePath || input.filepath || p.patterns[0] || ""
+  const operation = text(p.metadata.operation)
+  const lineCount = num(p.metadata.lineCount)
+  const title =
+    operation === "write" ? (p.metadata.exists === false ? "Write new file" : "Write existing file") : "Edit"
   return {
     icon: "→",
-    title: `Edit ${toolPath(file, { home: true })}`,
-    lines: [],
-    diff: p.metadata.diff ?? input.diff,
+    title: `${title} ${toolPath(file, { home: true })}`,
+    lines:
+      operation === "write" && lineCount !== undefined
+        ? [`Content: ${lineCount} line${lineCount === 1 ? "" : "s"}`]
+        : [],
+    ...(operation !== "write" && { diff: p.metadata.diff ?? input.diff }),
     file,
   }
 }
