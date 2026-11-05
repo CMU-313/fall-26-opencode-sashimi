@@ -3,7 +3,8 @@ Summarize the entire session in 2-5 words that capture what this conversation is
 RENAMED: <2-5 word title>
 
 Rules:
-- The title must be 2-5 words
+- The title MUST be less than 5 words.
+- If the title is longer, forcibly truncate the title to 4 words.
 - It should reflect the main topic, task, or purpose of the session
 - Use the same language as the user's messages, ensure at least one word in the title is in the message history.
 - Do not include explanations, apologies, or extra text outside the RENAMED line

@@ -470,6 +470,38 @@ describe("/autoname: real command with controlled LLM responses", () => {
   )
 
 
+  // PROPERTY R2: Title length restriction
+  // Every generated title must contain fewer than 5 words.
+  // Pattern: Invariant / boundary testing.
+  it.instance(
+    "R2 - Invariant: generated title contains fewer than 5 words",
+    () =>
+      Effect.gen(function* () {
+        const titles = fc.sample(
+          fc.array(word, {
+            minLength: 1,
+            maxLength: 8,
+          }).map((words) => words.join(" ")),
+          { numRuns: 12, seed: 207 },
+        )
+
+        for (const title of titles) {
+          const actual = yield* runAutoname(
+            `RENAMED: ${title}`,
+            ["Help me improve my code"],
+          )
+
+          const wordCount = actual.title
+            .trim()
+            .split(/\s+/)
+            .length
+
+          expect(wordCount).toBeLessThan(6)
+        }
+      }),
+    120_000,
+  )
+
 
   // PROPERTY R3: Conversation relevance
   // A title should share at least one word with the conversation.
