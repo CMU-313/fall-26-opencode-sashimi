@@ -1490,22 +1490,39 @@ const layer = Layer.effect(
         variant: input.variant,
       })
 
-      if (input.command === "autoname") {
-        for (const part of result.parts) {
-          if (part.type === "text" && typeof part.text === "string") {
-            const text = part.text
-            const match = text.match(/RENAMED:\s*(.+)/)
-            if (match && match[1]) {
-              const title = match[1].trim().split("\n")[0].trim()
-              if (title) {
-                yield* sessions.setTitle({ sessionID: input.sessionID, title }).pipe(
-                  Effect.catchCause((cause) => Effect.logError("autoname setTitle failed", { cause: Cause.squash(cause) }))
-                )
-              }
-            }
-          }
+
+if (input.command === "autoname") {
+  for (const part of result.parts) {
+    if (part.type === "text" && typeof part.text === "string") {
+      const text = part.text
+      const match = text.match(/RENAMED:\s*(.+)/)
+
+      if (match && match[1]) {
+        const title = match[1].trim().split("\n")[0].trim()
+
+        // R2: Truncate titles to at most 5 words.
+        const truncatedTitle = title
+          .split(/\s+/)
+          .slice(0, 5)
+          .join(" ")
+
+        if (truncatedTitle) {
+          yield* sessions.setTitle({
+            sessionID: input.sessionID,
+            title: truncatedTitle,
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("autoname setTitle failed", {
+                cause: Cause.squash(cause),
+              })
+            )
+          )
         }
       }
+    }
+  }
+}
+
 
       yield* events.publish(Command.Event.Executed, {
         name: input.command,
