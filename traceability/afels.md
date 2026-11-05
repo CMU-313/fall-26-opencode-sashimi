@@ -3,7 +3,7 @@
 **Target feature:** Bookmarking responses in the OpenCode TUI (bookmark the latest response, view the list, rename, remove, jump back to the message).
 
 **Main source files:**
-- `packages/tui/src/context/local.tsx`: bookmark logic (`toggleBookmark`, `removeBookmark`, `renameBookmark`, `loadBookmarks`, `saveBookmarks`...)
+- `packages/tui/src/context/local.tsx`: bookmark logic (`addBookmark`, `removeBookmark`, `renameBookmark`, `loadBookmarks`, `saveBookmarks`...)
 - `packages/tui/src/util/persistence.ts`: reading and writing `bookmark.json`
 - `packages/tui/src/routes/session/index.tsx`: the "Bookmark last assistant response" command
 - `packages/tui/src/component/dialog-bookmark-list.tsx`: the bookmark list (select, rename, remove)
