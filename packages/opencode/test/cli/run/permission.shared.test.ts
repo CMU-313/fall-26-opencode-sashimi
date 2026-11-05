@@ -50,6 +50,7 @@ describe("run permission shared", () => {
         expect(info.title.startsWith(`${action[0]?.toUpperCase()}${action.slice(1)} `)).toBe(true)
       }),
     )
+    console.log("R2 property passed: action wording matches the requested action")
   })
 
   test("R3: descriptions name the requested file and not a different file", () => {
@@ -66,6 +67,7 @@ describe("run permission shared", () => {
         expect(info.title).not.toContain(otherName)
       }),
     )
+    console.log("R3 property passed: descriptions name the requested file")
   })
 
   test("R4: changing only a read path preserves the description shape and approval controls", () => {
@@ -87,6 +89,7 @@ describe("run permission shared", () => {
         expect(firstControls).toEqual(["Allow once", "Allow always", "Reject"])
       }),
     )
+    console.log("R4 property passed: changing the read path preserves description shape and controls")
   })
 
   test("R5: write descriptions report content size without exposing written content", () => {
@@ -121,6 +124,7 @@ describe("run permission shared", () => {
         },
       ),
     )
+    console.log("R5 property passed: write descriptions summarize content without exposing it")
   })
 
   test("R6: write descriptions distinguish new files from existing files", () => {
@@ -154,6 +158,7 @@ describe("run permission shared", () => {
         expect(createControls).toEqual(["Allow once", "Allow always", "Reject"])
       }),
     )
+    console.log("R6 property passed: write descriptions distinguish new from existing files")
   })
 
   test("replies immediately for allow once", () => {
