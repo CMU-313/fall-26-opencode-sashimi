@@ -51,24 +51,29 @@ Looking at the acceptance criterion, we can see it is all tested
 
 ## Permission action descriptions (inseok)
 ### How to use the feature
-- This feature is available in the OpenCode app interface, not in the TUI permission prompt.
-- When a tool call requires permission, OpenCode pauses the call and shows an approval dock with a short description of the requested action next to the permission controls.
-- The description uses the permission request's existing metadata. For example, a read request can say `Agent wants to read the file src/components/Button.tsx`, and a write request can summarize content as a line or character count instead of showing the content.
+- When a tool call requires permission, OpenCode pauses the call and shows an approval dock in the app or TUI with a short description of the requested action next to the permission controls.
+- The description names the requested action and target. For whole-file writes, it distinguishes `Write new file <path>` from `Write existing file <path>` based on whether the target already exists.
+- Write descriptions summarize the content by line count instead of showing the proposed content or diff. Edit requests continue to identify the edit action and can show the proposed diff.
+- The permission controls remain Allow once, Allow always, and Reject regardless of whether a write will create or replace a file.
 - Long commands and search patterns are shortened to keep the description readable. Long paths are bounded while retaining the filename when possible; truncation avoids splitting grapheme clusters such as emoji.
 - The permission request's resource patterns remain available separately in the dock, so a shortened command description does not replace the full command/resource shown there.
 - Descriptions are formatted locally and deterministically; no LLM call is made to explain a permission request.
 
 ### How to manually test it
-- Follow these steps in the OpenCode app interface; the TUI does not display these action descriptions.
+- Follow these steps in either the OpenCode app interface or TUI.
 - Configure a tool such as `read`, `edit`, or `bash` to require approval, then start a session.
 - Ask the agent to read a file with a recognizable path. Confirm the permission dock names the file and shows the approval controls before the read completes.
 - Reject the request and confirm the tool does not complete. Repeat and approve once; confirm the tool proceeds.
-- Ask the agent to write several lines or edit a file. Confirm the description summarizes the content rather than dumping it.
+- Ask the agent to write several lines to a new path. Confirm the dock says `Write new file`, shows the path and line count, and does not display the proposed content or diff.
+- Ask the agent to write to that same path again. Confirm the dock now says `Write existing file`, while the target, line-count summary, and approval controls remain clear.
+- Ask the agent to edit an existing file with the `edit` action. Confirm it is identified as an edit and shows the proposed diff.
 - Trigger a long bash command. Confirm the one-line description is shortened and the full command remains available in the permission resources list.
 - If possible, test a long path and a path containing emoji or combined characters. Confirm the description remains bounded, retains the filename where possible, and does not show a broken character.
 
 ### Written tests for this feature
 #### Location of tests
+- `packages/opencode/test/cli/run/permission.shared.test.ts` contains fast-check properties for R2-R6: action wording against the requested action, requested filename, stable descriptions and controls when a read path changes, write content summaries that hide content, and the new-versus-existing write label for the same path.
+- `packages/opencode/test/tool/write.test.ts` verifies that the write tool passes whether the target exists and the written line count into the permission request metadata.
 - `packages/core/test/tool-permission-description.test.ts` contains unit tests for formatting descriptions from flat permission metadata, including read/write/edit, apply-patch, shell commands, search and web actions, todo and skill actions, missing values, long paths, and grapheme-safe truncation.
 - `packages/core/test/tool-apply-patch.test.ts`, `tool-bash.test.ts`, `tool-edit.test.ts`, `tool-read.test.ts`, `tool-skill.test.ts`, `tool-todowrite.test.ts`, `tool-webfetch.test.ts`, `tool-websearch.test.ts`, and `tool-write.test.ts` assert that tool integrations pass the expected flat metadata to permission requests.
 - `packages/core/test/tool-search-permission-metadata.test.ts` executes glob and grep through the tool registry and checks their permission metadata.
@@ -77,6 +82,9 @@ Looking at the acceptance criterion, we can see it is all tested
 - `packages/app/e2e/regression/session-request-docks.spec.ts` contains Playwright browser tests for a path-specific description, permission controls, approval reply, and long-command summary. The tests use mocked permission requests rather than a live OpenCode server.
 
 #### What's being tested
+- Run the property and write-metadata tests from `packages/opencode` with `bun test test/cli/run/permission.shared.test.ts test/tool/write.test.ts`.
+- The R2-R6 properties generate varied file names, actions, and content. They check action/path correctness, invariance when the requested file content changes, and metamorphic behavior when only a path or the file-existence state changes.
+- The write-tool test verifies both existence cases: the first write to a path is a new file, and a subsequent write to that path is an existing file. Together with the formatter property, this checks the metadata-to-description behavior for the revised R6 requirement.
 - Read descriptions include the requested path, and long paths stay bounded while retaining their filename when possible.
 - Write and edit descriptions identify the target without exposing full content; write content is summarized by line or character count.
 - Apply-patch requests include a target path so the edit description can identify a file.
