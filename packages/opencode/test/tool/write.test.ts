@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import path from "path"
@@ -59,6 +60,41 @@ const run = Effect.fn("WriteToolTest.run")(function* (
 })
 
 describe("tool.write", () => {
+  it.instance("provides write action, file existence, and line count in permission metadata", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "permission-summary.txt")
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+      const next: Tool.Context = {
+        ...ctx,
+        ask: (request) =>
+          Effect.sync(() => {
+            requests.push(request)
+          }),
+      }
+
+      yield* run(
+        {
+          filePath: filepath,
+          content: "first line\nsecond line\n",
+        },
+        next,
+      )
+      yield* run({ filePath: filepath, content: "replacement\n" }, next)
+
+      expect(requests[0]?.metadata).toMatchObject({
+        operation: "write",
+        exists: false,
+        lineCount: 2,
+      })
+      expect(requests[1]?.metadata).toMatchObject({
+        operation: "write",
+        exists: true,
+        lineCount: 1,
+      })
+    }),
+  )
+
   describe("new file creation", () => {
     it.instance("writes content to new file", () =>
       Effect.gen(function* () {
