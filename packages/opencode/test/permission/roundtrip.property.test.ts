@@ -20,12 +20,20 @@ const it = testEffect(
   ),
 )
 
-// R2 round-trip: a command denied by a rule runs again once that rule is
-// removed, and the user is told exactly once that the change unblocked it.
-// Base rules start with a catch-all allow and use allow/deny only, so the
-// service never parks a request waiting for an interactive "ask" reply. The
-// vocabulary also avoids recursive force flags, since Permission.decide
-// downgrades those to "ask" regardless of the rules (see dangerous.test.ts).
+// R2: Removing a blocking rule should give a notice/warning if something runs
+// that would have been blocked by it.
+// Kind: round-trip
+//
+// A command denied by a rule runs again once that rule is removed, and the
+// user is told exactly once that the change unblocked it.
+//
+// Generators: base rulesets start with a catch-all allow and use allow/deny
+// only, so the service never parks a request waiting for an interactive "ask"
+// reply. The vocabulary avoids recursive force flags, since Permission.decide
+// downgrades those to "ask" regardless of the rules (see
+// dangerous.property.test.ts). Commands and patterns share a small vocabulary
+// so the base rules sometimes match the command and sometimes do not, which
+// exercises both the "restored to allow" and "still denied" branches.
 const word = fc.constantFrom("rm", "ls", "git", "npm", "push", "-r", "-la", "a.txt", "src/x.ts", "x")
 const command = fc.array(word, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
 const token = fc.oneof(word, fc.constant("*"), word.map((w) => w + "*"))
@@ -40,7 +48,7 @@ const ruleset = fc
   .map((rules): PermissionV1.Rule[] => [{ permission: "bash", pattern: "*", action: "allow" }, ...rules])
 
 it.instance(
-  "round-trip: removing a deny rule re-enables the command and reports it once",
+  "R2: removing a deny rule re-enables the command and reports it once",
   () =>
     Effect.gen(function* () {
       const permission = yield* Permission.Service
@@ -91,6 +99,7 @@ it.instance(
           { numRuns: 100 },
         ),
       )
+      console.log("R2 round-trip property: deny, remove, retry held for 100 runs")
     }),
   { git: true },
   60000,

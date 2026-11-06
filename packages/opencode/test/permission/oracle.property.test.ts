@@ -4,9 +4,13 @@ import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
 
-// R5: differential test. The real evaluator compiles each pattern to a regex;
-// this oracle is a naive character-by-character glob walk. Any disagreement
-// between the two on a generated input is a bug in one of them.
+// R5: Permission evaluation should be testable against a simpler, independent
+// reference implementation to ensure commands are correctly allowed or denied.
+// Kind: model / oracle
+//
+// The real evaluator compiles each pattern to a regex; this oracle is a naive
+// character-by-character glob walk. Any disagreement between the two on a
+// generated input is a bug in one of them.
 function glob(str: string, pattern: string): boolean {
   if (pattern === "") return str === ""
   if (pattern[0] === "*") return glob(str, pattern.slice(1)) || (str !== "" && glob(str.slice(1), pattern))
@@ -26,8 +30,11 @@ function oracleEvaluate(permission: string, pattern: string, rules: PermissionV1
   return matched.at(-1) ?? { action: "ask", permission, pattern: "*" }
 }
 
-// A small vocabulary so generated patterns actually collide with generated
-// commands. Drawing from all strings would almost never exercise a match.
+// Generators: a small vocabulary of real shell words so generated patterns
+// actually collide with generated commands. Drawing from all strings would
+// almost never exercise a matching rule. Pattern tokens mix in "*", "?", and
+// prefix/suffix wildcards, and permission names include wildcards too, so the
+// oracle is checked on both halves of a rule.
 const word = fc.constantFrom("rm", "ls", "git", "npm", "push", "install", "-rf", "-la", "a.txt", "src/x.ts", "x")
 const command = fc.array(word, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
 const token = fc.oneof(
@@ -45,29 +52,32 @@ const action = fc.constantFrom<PermissionV1.Action>("allow", "ask", "deny")
 const rule = fc.record({ permission: permissionPattern, pattern, action })
 const ruleset = fc.array(rule, { maxLength: 6 })
 
-test("oracle: Wildcard.match agrees with a naive glob walk", () => {
+test("R5: Wildcard.match agrees with a naive glob walk", () => {
   fc.assert(
     fc.property(command, pattern, (str, pat) => {
       expect(Wildcard.match(str, pat)).toBe(oracleMatch(str, pat))
     }),
     { numRuns: 500 },
   )
+  console.log("R5 oracle property: Wildcard.match agreed with the glob-walk oracle for 500 runs")
 })
 
-test("oracle: Permission.evaluate agrees with a naive string-matching evaluator", () => {
+test("R5: Permission.evaluate agrees with a naive string-matching evaluator", () => {
   fc.assert(
     fc.property(permission, command, ruleset, (perm, cmd, rules) => {
       expect(Permission.evaluate(perm, cmd, rules)).toEqual(oracleEvaluate(perm, cmd, rules))
     }),
     { numRuns: 500 },
   )
+  console.log("R5 oracle property: Permission.evaluate agreed with the string-matching oracle for 500 runs")
 })
 
-test("oracle: evaluating merged rulesets equals evaluating their concatenation", () => {
+test("R5: evaluating merged rulesets equals evaluating their concatenation", () => {
   fc.assert(
     fc.property(permission, command, ruleset, ruleset, (perm, cmd, a, b) => {
       expect(Permission.evaluate(perm, cmd, a, b)).toEqual(oracleEvaluate(perm, cmd, [...a, ...b]))
     }),
     { numRuns: 300 },
   )
+  console.log("R5 oracle property: merged rulesets agreed with the oracle for 300 runs")
 })
