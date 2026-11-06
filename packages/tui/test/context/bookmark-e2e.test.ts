@@ -99,7 +99,7 @@ test("two TUI sessions open at once, each bookmarking a different response, both
     await wait(() => session2.local.bookmark.list().length === 0)
 
     // Session 1 bookmarks response "a" and saves.
-    await session1.local.bookmark.toggle({
+    await session1.local.bookmark.add({
       id: "a",
       sessionID: "session-1",
       sessionTitle: "Session 1",
@@ -109,7 +109,7 @@ test("two TUI sessions open at once, each bookmarking a different response, both
     // Session 2, unaware of session 1's save, bookmarks a *different*
     // response, "b". Without merge-on-save, session 2's write would
     // silently wipe out "a".
-    await session2.local.bookmark.toggle({
+    await session2.local.bookmark.add({
       id: "b",
       sessionID: "session-2",
       sessionTitle: "Session 2",
