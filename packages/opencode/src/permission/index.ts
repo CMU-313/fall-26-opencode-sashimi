@@ -40,6 +40,24 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
   )
 }
 
+// Recursive force deletes always need a human in the loop, so an allow rule
+// only ever downgrades them to "ask". Deny rules still win.
+export function decide(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
+  const rule = evaluate(permission, pattern, ...rulesets)
+  if (rule.action !== "allow" || permission !== "bash" || !dangerous(pattern)) return rule
+  return { ...rule, action: "ask" }
+}
+
+export function dangerous(command: string) {
+  const tokens = command.trim().split(/\s+/)
+  const head = tokens[0] === "sudo" ? tokens[1] : tokens[0]
+  if (head !== "rm") return false
+  const flags = tokens.filter((token) => token.startsWith("-"))
+  const has = (long: string, short: RegExp) =>
+    flags.some((flag) => flag === long || (/^-[A-Za-z]+$/.test(flag) && short.test(flag)))
+  return has("--recursive", /[rR]/) && has("--force", /f/)
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
 const layer = Layer.effect(
@@ -74,7 +92,7 @@ const layer = Layer.effect(
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = decide(request.permission, pattern, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         const key = request.permission + "\0" + pattern
         if (rule.action === "deny") {
