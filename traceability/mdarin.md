@@ -1,6 +1,6 @@
 # Traceability: mdarin
 
-Feature: Permissions. Team: Sashimi. Branch: `mdarin/properties`. PR: https://github.com/CMU-313/fall-26-opencode-sashimi/pull/33
+Feature: Permissions. Team: Sashimi. Branch: `mdarin/properties`. PR: https://github.com/CMU-313/fall-26-opencode-sashimi/pull/34
 
 Property tests live in `packages/opencode/test/permission/` and run with `bun test test/permission` from `packages/opencode`. All four properties and their generators were written with Claude Code; I reviewed each one and own its correctness.
 
