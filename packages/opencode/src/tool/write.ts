@@ -58,6 +58,9 @@ export const WriteTool = Tool.define(
             metadata: {
               filepath,
               diff,
+              operation: "write",
+              exists,
+              lineCount: contentNew.split("\n").length - Number(contentNew.endsWith("\n")),
             },
           })
 
