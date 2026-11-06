@@ -71,6 +71,7 @@ export type Event =
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventPermissionUnblocked
   | EventTuiPromptAppend2
   | EventTuiCommandExecute2
   | EventTuiToastShow2
@@ -1398,6 +1399,16 @@ export type GlobalEvent = {
           sessionID: string
           requestID: string
           reply: "once" | "always" | "reject"
+        }
+      }
+    | {
+        id: string
+        type: "permission.unblocked"
+        properties: {
+          sessionID: string
+          permission: string
+          pattern: string
+          rule: PermissionRule
         }
       }
     | {
@@ -2919,6 +2930,7 @@ export type V2Event =
   | LspUpdated
   | PermissionAsked
   | PermissionReplied
+  | PermissionUnblocked
   | TuiPromptAppend
   | TuiCommandExecute
   | TuiToastShow
@@ -5740,6 +5752,26 @@ export type PermissionReplied = {
   }
 }
 
+export type PermissionUnblocked = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "permission.unblocked"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    permission: string
+    pattern: string
+    rule: PermissionRule
+  }
+}
+
 export type TuiPromptAppend = {
   id: string
   metadata?: {
@@ -6882,6 +6914,17 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
+  }
+}
+
+export type EventPermissionUnblocked = {
+  id: string
+  type: "permission.unblocked"
+  properties: {
+    sessionID: string
+    permission: string
+    pattern: string
+    rule: PermissionRule
   }
 }
 

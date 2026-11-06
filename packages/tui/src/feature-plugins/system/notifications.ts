@@ -56,6 +56,16 @@ const tui: TuiPlugin = async (api) => {
     permissions.delete(event.properties.requestID)
   })
 
+  api.event.on("permission.unblocked", (event) => {
+    const rule = event.properties.rule
+    void api.attention.notify({
+      title: api.state.session.get(event.properties.sessionID)?.title,
+      message: `Permission change enabled "${event.properties.pattern}", previously blocked by "${rule.pattern}": ${rule.action}`,
+      notification: { when: "blurred" },
+      sound: false,
+    })
+  })
+
   api.event.on("session.status", (event) => {
     const sessionID = event.properties.sessionID
     if (event.properties.status.type === "busy" || event.properties.status.type === "retry") {

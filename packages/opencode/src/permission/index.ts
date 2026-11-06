@@ -23,6 +23,9 @@ interface PendingEntry {
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
   approved: PermissionV1.Rule[]
+  // Rules that denied a (permission, pattern) pair earlier in this instance,
+  // keyed by `${permission}\0${pattern}`, so a later non-deny can be reported.
+  denied: Map<string, PermissionV1.Rule>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -49,6 +52,7 @@ const layer = Layer.effect(
         const state = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
           approved: [],
+          denied: new Map<string, PermissionV1.Rule>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -65,16 +69,28 @@ const layer = Layer.effect(
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending, denied } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
+        const key = request.permission + "\0" + pattern
         if (rule.action === "deny") {
+          denied.set(key, rule)
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+          })
+        }
+        const previous = denied.get(key)
+        if (previous) {
+          denied.delete(key)
+          yield* events.publish(Event.Unblocked, {
+            sessionID: request.sessionID,
+            permission: request.permission,
+            pattern,
+            rule: previous,
           })
         }
         if (rule.action === "allow") continue
