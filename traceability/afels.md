@@ -27,3 +27,15 @@
 ## Requirement changes
 
 No requirements changed. Each requirement is buildable as written. R1, R2, R3 and R5 already hold in the current code, R4 needs only a change to the bookmark command so a second press reports "already bookmarked" instead of removing the bookmark, and R6 can use the confirmation dialog OpenCode uses.
+
+## Hand-written mutants
+
+Patches are in `mutants/afels/`. Each mutant changes `packages/tui/src/context/local.tsx`. Predictions were written before running each mutant.
+
+| ID | Requirement targeted | Change | Predicted killer | Actual result |
+|---|---|---|---|---|
+| H1 | R2 | `removeBookmark` removes every bookmark saved on the same day as the target, not just the target (reuses the list's "group by day" idea). | | |
+| H2 | R3 | `isLocalBookmark` checks `typeof item.name === "number"` instead of `"string"`, so renamed bookmarks are dropped when `bookmark.json` is loaded after a restart. | | |
+| H3 | R4 | `addBookmark` decides "already bookmarked" by matching the response text instead of the message id, so a different response with the same text is reported as already saved. | | |
+| H4 | R5 | `renameBookmark` treats an empty or all-spaces name as "no change" (`trimmed \|\| item.name`), so clearing a custom name keeps the old name. | | |
+| H5 | R1 | `bookmarkSnippet` truncates to 79 characters instead of 80, so a long response's default title is one character short. | | |
