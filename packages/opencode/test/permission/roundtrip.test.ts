@@ -23,8 +23,10 @@ const it = testEffect(
 // R2 round-trip: a command denied by a rule runs again once that rule is
 // removed, and the user is told exactly once that the change unblocked it.
 // Base rules start with a catch-all allow and use allow/deny only, so the
-// service never parks a request waiting for an interactive "ask" reply.
-const word = fc.constantFrom("rm", "ls", "git", "npm", "push", "-rf", "-la", "a.txt", "src/x.ts", "x")
+// service never parks a request waiting for an interactive "ask" reply. The
+// vocabulary also avoids recursive force flags, since Permission.decide
+// downgrades those to "ask" regardless of the rules (see dangerous.test.ts).
+const word = fc.constantFrom("rm", "ls", "git", "npm", "push", "-r", "-la", "a.txt", "src/x.ts", "x")
 const command = fc.array(word, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
 const token = fc.oneof(word, fc.constant("*"), word.map((w) => w + "*"))
 const pattern = fc.array(token, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
