@@ -6,7 +6,7 @@
 // shows that every property actually ran and how many inputs it checked.
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import fc from "fast-check"
-import { mkdtemp, rm } from "fs/promises"
+import { mkdtemp, readdir, readFile, rm, writeFile } from "fs/promises"
 import os from "os"
 import path from "path"
 import {
@@ -19,6 +19,10 @@ import {
   addBookmark,
   type LocalBookmark,
 } from "../../src/context/local"
+
+// Fixed seed (P5): fast-check generates the same inputs on every run, so a
+// mutant is killed or survives the same way each time Stryker runs.
+fc.configureGlobal({ seed: 42 })
 
 function report(id: string, kind: string, runs: number) {
   console.log(`[bookmark properties] ${id} (${kind}): passed ${runs} generated cases`)
@@ -134,6 +138,13 @@ test("R1: an unnamed bookmark's title is the start of its text", () => {
       const responseWords = shown.split(" ")
       const whole = truncated ? titleWords.slice(0, -1) : titleWords
       expect(responseWords.slice(0, whole.length)).toEqual(whole)
+
+      // Added in P5 (kills H5): "first 80 characters" (R5's acceptance
+      // criteria) means a long response's title uses all 80: the first 79
+      // characters of the text plus "…". A short one shows the whole text.
+      const graphemes = [...new Intl.Segmenter().segment(shown)].map((g) => g.segment)
+      if (graphemes.length > 80) expect(title).toBe(graphemes.slice(0, 79).join("") + "…")
+      else expect(title).toBe(shown)
     }),
     { numRuns: runs },
   )
@@ -199,6 +210,97 @@ test("R3: saving then loading bookmarks returns them unchanged", async () => {
   report("R3", "round-trip", runs)
 })
 
+
+// Generators for bookmark.json files that are not a clean save (added in P5).
+// A real file can end up with bad entries (hand edits, an older version, a
+// partial write), so these reach the validation and error-handling code that
+// valid round trips never touch.
+
+// An entry that is not a usable bookmark: not an object at all, or a real
+// bookmark with exactly one field missing or of the wrong type. Changing one
+// field at a time means each field's check has to do its own job.
+const fields = ["id", "sessionID", "sessionTitle", "text", "createdAt", "name"] as const
+const brokenEntry: fc.Arbitrary<unknown> = fc.oneof(
+  fc.constantFrom<unknown>(null, 0, 42, "bookmark", true, []),
+  fc
+    .tuple(bookmark, fc.constantFrom(...fields), fc.boolean(), fc.constantFrom<unknown>(null, true, {}, [], 42, "1"))
+    // A wrong value has to really be the wrong type for that field.
+    .filter(([, field, , wrong]) => (field === "createdAt" ? typeof wrong !== "number" : typeof wrong !== "string"))
+    .map(([b, field, remove, wrong]) => {
+      const entry: Record<string, unknown> = { ...b }
+      // A missing name is allowed (unnamed bookmark), so name is only ever given a wrong type.
+      if (remove && field !== "name") delete entry[field]
+      else entry[field] = wrong
+      return entry
+    }),
+)
+
+// R3 (model/oracle): loading a file with some broken entries keeps exactly the
+// valid bookmarks, in order. The oracle is the generator itself: it knows which
+// entries it built valid and which it broke.
+test("R3: loading keeps exactly the valid bookmarks from a file with broken entries", async () => {
+  const runs = 200
+  let n = 0
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(
+        fc.oneof(
+          bookmark.map((value) => ({ valid: true, value })),
+          brokenEntry.map((value) => ({ valid: false, value })),
+        ),
+        { maxLength: 20 },
+      ),
+      async (entries) => {
+        const file = path.join(dir, `mixed-${n++}.json`)
+        await writeFile(file, JSON.stringify({ items: entries.map((e) => e.value) }))
+        const loaded = await loadBookmarks(file)
+        expect(loaded).toEqual(entries.filter((e) => e.valid).map((e) => e.value as LocalBookmark))
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R3", "model/oracle", runs)
+})
+
+// R3 (invariant): a missing, wrong-shape, or corrupted bookmark.json always
+// loads as an empty list instead of crashing, and a corrupted file is backed
+// up with its exact contents, so a restart never silently destroys bookmarks.
+test("R3: an unreadable bookmark.json loads as empty and a corrupted one is backed up", async () => {
+  const runs = 100
+  await fc.assert(
+    fc.asyncProperty(
+      fc.oneof(
+        fc.constant({ kind: "missing" as const, content: "" }),
+        // Valid JSON, but not { items: [...] }.
+        fc
+          .constantFrom("null", "42", '"bookmarks"', "[]", "{}", '{"items":3}', '{"items":"x"}', '{"other":[]}')
+          .map((content) => ({ kind: "shape" as const, content })),
+        // Not JSON at all: a save cut off partway through. Closing brackets
+        // are removed so the text can never accidentally be valid.
+        fc
+          .string({ maxLength: 40 })
+          .map((s) => ({ kind: "corrupt" as const, content: '{"items":[' + s.replace(/[\]}]/g, "") })),
+      ),
+      async (input) => {
+        // A fresh folder per case, so the backup check only sees this case's files.
+        const folder = await mkdtemp(path.join(dir, "unreadable-"))
+        const file = path.join(folder, "bookmark.json")
+        if (input.kind !== "missing") await writeFile(file, input.content)
+
+        expect(await loadBookmarks(file)).toEqual([])
+
+        if (input.kind === "corrupt") {
+          const backups = (await readdir(folder)).filter((name) => name.startsWith("bookmark.json.corrupt-"))
+          expect(backups).toHaveLength(1)
+          expect(await readFile(path.join(folder, backups[0]!), "utf8")).toBe(input.content)
+        }
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R3", "invariant", runs)
+})
+
 // ---------------------------------------------------------------------------
 // R4 (metamorphic): "Bookmarking an already bookmarked response never creates
 // a second entry, and it tells the user the response is already saved."
@@ -221,6 +323,16 @@ test("R4: bookmarking twice gives the same list as bookmarking once", () => {
       expect(twice.items.filter((item) => item.id === entry.id)).toHaveLength(1)
       // ...and reports that it was already saved.
       expect(twice.result).toBe("exists")
+
+      // Added in P5 (kills H3): "already bookmarked" is about the same
+      // response, not the same text. A different response (different message
+      // id) whose text happens to match still gets its own bookmark. The
+      // generator never makes two responses with equal text by chance, so
+      // this case is built on purpose.
+      const sameText = { ...response, id: `other_${entry.id}` }
+      const third = addBookmark(twice.items, sameText)
+      expect(third.result).toBe("added")
+      expect(third.items).toHaveLength(twice.items.length + 1)
     }),
     { numRuns: runs },
   )
@@ -246,6 +358,9 @@ test("R5: renaming then clearing the name restores the original title", () => {
         const original = bookmarkTitle(target)
 
         const renamed = renameBookmark(list, target.id, name)
+        // Added in P5: the rename itself has to take effect. Without this, a
+        // rename that does nothing also "round-trips" back to the original.
+        expect(bookmarkTitle(renamed[index]!)).toBe(name.trim())
         const cleared = renameBookmark(renamed, target.id, blank)
 
         expect(bookmarkTitle(cleared[index]!)).toBe(original)
