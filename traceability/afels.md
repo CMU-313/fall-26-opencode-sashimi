@@ -88,3 +88,67 @@ Hand-written mutants come from the requirements and interviews, so they are real
 The 12 non-equivalent survivors left:
 - `sortBookmarks` (3) and `pruneBookmarksForSession` (6): not covered by any requirement (R1–R6), so I didn't add properties for them. They are real behavior (list order, cleanup when a session is deleted), so they're not equivalent, just out of scope for my requirements.
 - `loadBookmarks` (3): `!data || typeof data !== "object"` → `false` or `&&`, and `!Array.isArray(items)` → `false`. These only change whether a file that is valid JSON but the wrong shape (like `null` or `{"items":3}`) gets backed up before returning `[]`. The loaded bookmarks are the same. None of my requirements say how to handle htis, so I didn't add a property that would lock in the current behavior.
+
+## Agent failure case
+
+I asked opencode to write one for R4, model: Nemotron 3 Ultra. The property is in `packages/tui/test/bookmark/agent-r4.property.test.ts`.
+
+**1. Transcript excerpt**
+
+My prompt:
+
+> I'm writing property-based tests with fast-check for a bookmark feature in packages/tui/src/context/local.tsx. Write one fast-check property for this requirement:
+>
+> R4: Bookmarking an already bookmarked response never creates a second entry, and it tells the user the response is already saved.
+>
+> Acceptance criteria: Bookmark the latest response, then run the bookmark command on it again. The list still has exactly one entry for it, and a message says it is already bookmarked and gives its name.
+>
+> The function to test is addBookmark(items, entry) in local.tsx. Put the property in a new file, packages/tui/test/bookmark/agent-r4.property.test.ts, using bun:test and fc.assert(fc.property(...)). Use fc.configureGlobal({ seed: 42 }) at the top. Don't read or reuse the other files in packages/tui/test/bookmark/.
+
+The property opencode wrote:
+
+```ts
+const bookmarkArb = fc.record({
+  id: fc.string({ minLength: 1 }),
+  sessionID: fc.string({ minLength: 1 }),
+  sessionTitle: fc.string({ minLength: 1 }),
+  text: fc.string(),
+  name: fc.option(fc.string()),
+})
+
+describe("R4: addBookmark - duplicate handling", () => {
+  it("bookmarking an already bookmarked response never creates a second entry and returns exists", () => {
+    fc.assert(
+      fc.property(bookmarkArb, (entry) => {
+        const items: LocalBookmark[] = []
+        const firstResult = addBookmark(items, entry)
+        expect(firstResult.result).toBe("added")
+        expect(firstResult.items).toHaveLength(1)
+        expect(firstResult.existing).toBeUndefined()
+
+        const secondResult = addBookmark(firstResult.items, entry)
+        expect(secondResult.result).toBe("exists")
+        expect(secondResult.items).toHaveLength(1)
+        expect(secondResult.existing).toBeDefined()
+        expect(secondResult.existing?.id).toBe(entry.id)
+      })
+    )
+  })
+})
+```
+
+Opencode reported "The test passes consistently with fc.configureGlobal({ seed: 42 }) for reproducibility." 
+
+**2. The mutant it let survive:** H3 (`addBookmark` decides "already bookmarked" by matching `text` instead of the message `id`). With H3 applied, opencode's property still passes. (It also passes against H1, H2, H4 and H5, since it only calls `addBookmark`.)
+
+**3. Why the property was too weak:** It always starts from an empty list and adds the same entry twice, so the second call finds a match whether the code compares ids or texts. It never adds a second, different response, so it can't tell "same message" apart from "same text", which is exactly the mistake H3 makes. It also starts from an empty list every time, so it never checks that existing bookmarks are left alone.
+
+**4. Strengthened version and evidence:** Below opencode's property in the same file, the strengthened property starts from a generated list of existing bookmarks, checks that re-adding the same response returns `"exists"` and leaves the list exactly the same, and then adds a different response (`id` + `"-copy"`) with the same text, which must be `"added"` as a new entry. With H3 applied:
+
+```
+(pass) R4: addBookmark - duplicate handling > bookmarking an already bookmarked response never creates a second entry and returns exists
+(fail) R4: addBookmark - duplicate handling (strengthened) > re-adding the same response says exists, but a different response with the same text is added
+Counterexample: [[],{"id":" ","sessionID":" ","sessionTitle":" ","text":"","name":undefined}]
+```
+
+On the real code, both properties pass.
