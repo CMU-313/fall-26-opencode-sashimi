@@ -694,6 +694,68 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - publishes unblocked event when a previously denied pattern is no longer denied",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const seen: unknown[] = []
+      const unsub = yield* events.listen((event) => {
+        if (event.type === Permission.Event.Unblocked.type) seen.push(event.data)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsub)
+
+      const input = {
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["rm test.txt"],
+        metadata: {},
+        always: [],
+      }
+      const deny = { permission: "bash", pattern: "rm *", action: "deny" as const }
+      const err = yield* fail(ask({ ...input, ruleset: [{ permission: "bash", pattern: "*", action: "allow" }, deny] }))
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+      expect(seen).toHaveLength(0)
+
+      // Same command with the deny rule removed, as if the config was edited and reloaded.
+      yield* ask({ ...input, ruleset: [{ permission: "bash", pattern: "*", action: "allow" }] })
+      expect(seen).toEqual([
+        { sessionID: SessionID.make("session_test"), permission: "bash", pattern: "rm test.txt", rule: deny },
+      ])
+
+      // Only reported once; a further allowed run is silent.
+      yield* ask({ ...input, ruleset: [{ permission: "bash", pattern: "*", action: "allow" }] })
+      expect(seen).toHaveLength(1)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - does not publish unblocked event when the pattern was never denied",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const seen: unknown[] = []
+      const unsub = yield* events.listen((event) => {
+        if (event.type === Permission.Event.Unblocked.type) seen.push(event.data)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsub)
+
+      yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+      })
+      expect(seen).toHaveLength(0)
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(

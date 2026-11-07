@@ -23,6 +23,9 @@ interface PendingEntry {
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
   approved: PermissionV1.Rule[]
+  // Rules that denied a (permission, pattern) pair earlier in this instance,
+  // keyed by `${permission}\0${pattern}`, so a later non-deny can be reported.
+  denied: Map<string, PermissionV1.Rule>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -37,6 +40,24 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
   )
 }
 
+// Recursive force deletes always need a human in the loop, so an allow rule
+// only ever downgrades them to "ask". Deny rules still win.
+export function decide(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
+  const rule = evaluate(permission, pattern, ...rulesets)
+  if (rule.action !== "allow" || permission !== "bash" || !dangerous(pattern)) return rule
+  return { ...rule, action: "ask" }
+}
+
+export function dangerous(command: string) {
+  const tokens = command.trim().split(/\s+/)
+  const head = tokens[0] === "sudo" ? tokens[1] : tokens[0]
+  if (head !== "rm") return false
+  const flags = tokens.filter((token) => token.startsWith("-"))
+  const has = (long: string, short: RegExp) =>
+    flags.some((flag) => flag === long || (/^-[A-Za-z]+$/.test(flag) && short.test(flag)))
+  return has("--recursive", /[rR]/) && has("--force", /f/)
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
 const layer = Layer.effect(
@@ -49,6 +70,7 @@ const layer = Layer.effect(
         const state = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
           approved: [],
+          denied: new Map<string, PermissionV1.Rule>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -65,16 +87,28 @@ const layer = Layer.effect(
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending, denied } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = decide(request.permission, pattern, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
+        const key = request.permission + "\0" + pattern
         if (rule.action === "deny") {
+          denied.set(key, rule)
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+          })
+        }
+        const previous = denied.get(key)
+        if (previous) {
+          denied.delete(key)
+          yield* events.publish(Event.Unblocked, {
+            sessionID: request.sessionID,
+            permission: request.permission,
+            pattern,
+            rule: previous,
           })
         }
         if (rule.action === "allow") continue
