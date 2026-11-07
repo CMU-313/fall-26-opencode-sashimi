@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/context/local.tsx b/packages/tui/src/context/local.tsx
+index 19e3dac..06d6f1c 100644
+--- a/packages/tui/src/context/local.tsx
++++ b/packages/tui/src/context/local.tsx
+@@ -134,7 +134,7 @@ export function bookmarkText(parts: ReadonlyArray<{ type: string; text?: string;
+ // The default title of an unnamed bookmark: the start of its text, with runs
+ // of whitespace collapsed to one space, cut to 80 characters.
+ export function bookmarkSnippet(text: string) {
+-  return Locale.truncate(text.replace(/\s+/g, " ").trim(), 80)
++  return Locale.truncate(text.replace(/\s+/g, " ").trim(), 79)
+ }
+ 
+ // What the bookmark list shows for a bookmark: its custom name if it has one,
