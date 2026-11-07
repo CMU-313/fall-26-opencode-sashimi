@@ -1,0 +1,7 @@
+{
+  "testRunner": "command",
+  "commandRunner": { "command": "bun test test/bookmark" },
+  "mutate": ["src/context/local.tsx:30-145"],
+  "coverageAnalysis": "off",
+  "reporters": ["html", "clear-text", "progress"]
+}
