@@ -39,3 +39,36 @@ Patches are in `mutants/afels/`. Each mutant changes `packages/tui/src/context/l
 | H3 | R4 | `addBookmark` decides "already bookmarked" by matching the response text instead of the message id, so a different response with the same text is reported as already saved. | None: the R4 property only bookmarks the same response twice, and generated responses almost never have identical text, so the mutant's text match never triggers. | **Survived**. The R4 property never bookmarks two different responses with the same text. |
 | H4 | R5 | `renameBookmark` treats an empty or all-spaces name as "no change" (`trimmed \|\| item.name`), so clearing a custom name keeps the old name. | R5 round-trip: after renaming and then clearing, it checks the title equals the original snippet. With the mutant the custom name stays, so the title is the custom name, not the snippet. | **Killed** by R5 (round-trip), as predicted. Counterexample: rename to `"!"`, then clear with `""`; the name stayed `"!"` instead of going back to the snippet. |
 | H5 | R1 (default title; the 80-character length is from R5's acceptance criteria) | `bookmarkSnippet` truncates to 79 characters instead of 80, so a long response's default title is one character short. | None. Responses of 79 characters or fewer are not truncated, so the mutant behaves the same. For longer responses the title is 79 characters, but the R1 title property only checks it is at most 80, starts the response text, and keeps the same leading words, so a title one character short still passes. | **Survived**. The R1 title property only checks the title is at most 80 characters, so a long response titled with 79 still passes. |
+
+## Stryker comparison
+
+Config: `packages/tui/stryker.config.json` mutates the bookmark logic in `packages/tui/src/context/local.tsx` (lines 30–145) and runs only the property tests (`bun test test/bookmark`). Report: `mutants/afels/mutation.html`.
+
+**Initial mutation score:** 64.80% (81 killed, 44 survived, 125 mutants).
+
+Where the 44 survivors are:
+
+| Code | Survivors | Why they survived |
+|---|---|---|
+| `isLocalBookmark` (checks entries read from `bookmark.json`) | 20 | The R3 generator only produces valid bookmarks, so making a check more permissive (e.g. `typeof item.id === "string"` → `true`) is never noticed. Making a check stricter is caught, because valid bookmarks get dropped. |
+| `loadBookmarks` error handling | 13 | R3 only saves and loads a valid file. A missing, corrupted, or wrongly shaped file is never tested. |
+| `pruneBookmarksForSession` | 6 | Not covered by any requirement (R1–R6), so no property calls it. |
+| `sortBookmarks` | 3 | Not covered by any requirement, so no property calls it. |
+| `renameBookmark` | 1 | `item.id === id` → `false` makes rename do nothing, and R5 still passes (see below). |
+| `bookmarkText` | 1 | `part.text ?? ""` → `part.text ?? "Stryker was here!"`. Equivalent (see below). |
+
+**Which hand-written mutants did Stryker never generate, and why?**
+Stryker never generated H1, H3, H4, or H5. It only makes small syntax-level changes (flip an operator, replace a condition with `true`/`false`, empty a block or string), so it doesn't invent new logic like grouping by day (H1), compare a different field (H3), or substitute a different value (H4). It never changed the `80` in H5 at all, because Stryker has no mutator for number literals. The only one it came close to is H2: on the same line it generated `typeof item.name === ""`, which also drops renamed bookmarks on load.
+
+**Which Stryker survivors would I never have thought of? Are any plausible real bugs?**
+- **Rename that does nothing** (`renameBookmark`, `item.id === id` → `false`). The R5 property renames and then clears the name, and checks the title is back to the original. If rename never changes anything, the title is "back to the original" too, so R5 passes. This is a plausible bug (e.g. comparing the wrong id), and users would notice immediately.
+- **Corrupted-file backup that silently fails** (`loadBookmarks`, the backup name `` `${filePath}.corrupt-…` `` → `` ` ` ``). The rename fails and is ignored, so a corrupted `bookmark.json` isn't backed up and is overwritten on the next save, which is a plausible data-loss bug.
+- **Loading without filtering** (`items.filter(isLocalBookmark)` → `items`) and the weakened `isLocalBookmark` checks. A bad entry would be loaded and could crash the list later. Plausible if someone "simplifies" the validation.
+- Returning `["Stryker was here"]` from `loadBookmarks`, is unrealistic but shows that the error paths are untested.
+
+**What does each approach find that the other doesn't?**
+Hand-written mutants come from the requirements and interviews, so they are realistic and targeted. They showed specific blind spots in my generators (H3 never makes two responses with the same text) and assertions (H5 only checks an upper limit). Stryker is exhaustive and mechanical: it found whole code paths no property reaches (validation and error handling), and a weak round-trip property (rename doing nothing) that I didn't think to break. But many of its mutants are unrealistic, and it measures code that isn't related to any requirement, so its score should not be taken at face value.
+
+**Equivalent mutants**
+- `bookmarkText`: `part.text ?? ""` → `part.text ?? "Stryker was here!"`. The fallback only runs when a `text` part has no `text`, and in OpenCode a text part always has a `text` string (it's required by the part type), so the fallback is never used. The saved text is the same for every real response, so this mutant has no observable effect.
+
