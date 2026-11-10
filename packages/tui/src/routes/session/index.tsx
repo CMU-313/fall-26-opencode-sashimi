@@ -37,7 +37,7 @@ import type {
   ReasoningPart,
   SessionStatus,
 } from "@opencode-ai/sdk/v2"
-import { bookmarkText, bookmarkTitle, useLocal } from "../../context/local"
+import { bookmarkText, bookmarkTitle, latestAssistantMessage, useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -968,7 +968,7 @@ export function Session() {
       value: "session.bookmark.toggle",
       category: "Session",
       run: async () => {
-        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        const lastAssistantMessage = latestAssistantMessage(messagesBeforeRevert())
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
           dialog.clear()

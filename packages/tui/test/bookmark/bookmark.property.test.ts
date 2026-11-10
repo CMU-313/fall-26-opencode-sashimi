@@ -12,7 +12,9 @@ import path from "path"
 import {
   bookmarkText,
   bookmarkTitle,
+  latestAssistantMessage,
   loadBookmarks,
+  mergeBookmarks,
   removeBookmark,
   renameBookmark,
   saveBookmarks,
@@ -301,6 +303,60 @@ test("R3: an unreadable bookmark.json loads as empty and a corrupted one is back
   report("R3", "invariant", runs)
 })
 
+// R3 (round-trip), added in P5 red team (kills slaman's A2): the app never
+// saves with saveBookmarks alone. Every save re-reads the file and merges it
+// with this session's list (mergeBookmarks) before writing. So: load, rename
+// one bookmark, save the way the app does, load again after a "restart", and
+// the rename must still be there.
+test("R3: a rename survives the app's save path (merge, save, load)", async () => {
+  const runs = 100
+  let n = 0
+  await fc.assert(
+    fc.asyncProperty(
+      bookmarkList(1).chain((items) => fc.tuple(fc.constant(items), fc.nat({ max: items.length - 1 }))),
+      customName,
+      async ([items, index], name) => {
+        const file = path.join(dir, `merge-${n++}.json`)
+        await saveBookmarks(file, items)
+        // What this session loaded at startup.
+        const base = await loadBookmarks(file)
+        const mine = renameBookmark(base, items[index]!.id, name)
+        // save(): re-read the file, merge, write.
+        await saveBookmarks(file, mergeBookmarks(base, mine, await loadBookmarks(file)))
+        expect(await loadBookmarks(file)).toEqual(mine)
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R3", "round-trip (save path)", runs)
+})
+
+// R1 (model/oracle), added in P5 red team (kills slaman's A3): the bookmark
+// command must save the *latest* response, so the list entry starts with the
+// words of the response the user just bookmarked. Messages are a random mix of
+// user and assistant turns (and sometimes none from the assistant); the oracle
+// walks the list backwards by hand.
+test("R1: the bookmark command picks the latest assistant response", () => {
+  const runs = 300
+  fc.assert(
+    fc.property(
+      fc.array(fc.constantFrom("user", "assistant"), { maxLength: 12 }).map((roles) => roles.map((role, i) => ({ id: `msg_${i}`, role }))),
+      (messages) => {
+        let expected: (typeof messages)[number] | undefined
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i]!.role === "assistant") {
+            expected = messages[i]
+            break
+          }
+        }
+        expect(latestAssistantMessage(messages)).toBe(expected)
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R1", "model/oracle (latest response)", runs)
+})
+
 // ---------------------------------------------------------------------------
 // R4 (metamorphic): "Bookmarking an already bookmarked response never creates
 // a second entry, and it tells the user the response is already saved."
@@ -310,7 +366,7 @@ test("R3: an unreadable bookmark.json loads as empty and a corrupted one is back
 test("R4: bookmarking twice gives the same list as bookmarking once", () => {
   const runs = 300
   fc.assert(
-    fc.property(bookmarkList(), bookmark, (items, entry) => {
+    fc.property(bookmarkList(), bookmark, customName, (items, entry, newName) => {
       // The response being bookmarked is not saved yet.
       const start = items.filter((item) => item.id !== entry.id)
       const { createdAt: _, ...response } = entry
@@ -323,6 +379,17 @@ test("R4: bookmarking twice gives the same list as bookmarking once", () => {
       expect(twice.items.filter((item) => item.id === entry.id)).toHaveLength(1)
       // ...and reports that it was already saved.
       expect(twice.result).toBe("exists")
+
+      // Added in P5 red team (kills slaman's A1): the "already bookmarked"
+      // message names the *saved* bookmark, so the bookmark reported back has
+      // to be the saved one, with its custom name, not the incoming response.
+      // The real command never passes a name, so the incoming one has none.
+      const renamed = renameBookmark(once.items, entry.id, newName)
+      const { name: _name, ...incoming } = response
+      const again = addBookmark(renamed, incoming)
+      expect(again.result).toBe("exists")
+      expect(again.existing).toEqual(renamed.find((item) => item.id === entry.id))
+      expect(bookmarkTitle(again.existing!)).toBe(newName.trim())
 
       // Added in P5 (kills H3): "already bookmarked" is about the same
       // response, not the same text. A different response (different message

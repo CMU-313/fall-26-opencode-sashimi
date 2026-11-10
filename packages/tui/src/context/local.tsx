@@ -189,6 +189,17 @@ export function mergeBookmarks(
   return result
 }
 
+// The response the bookmark command saves: the most recent assistant message.
+// Pulled out of the command (routes/session/index.tsx) so which message gets
+// bookmarked can be property-tested (red team mutant A3 from slaman swapped
+// findLast for find inside the command, which no property could reach).
+// For real session messages the result is typed as the assistant message;
+// for plain objects (like the property test's) it keeps their own type.
+type AssistantOf<T> = [Extract<T, { role: "assistant" }>] extends [never] ? T : Extract<T, { role: "assistant" }>
+export function latestAssistantMessage<T extends { role: string }>(messages: readonly T[]) {
+  return messages.findLast((message) => message.role === "assistant") as AssistantOf<T> | undefined
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
