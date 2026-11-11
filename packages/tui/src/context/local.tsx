@@ -15,6 +15,7 @@ import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
 import { Locale } from "../util/locale"
+import { errorMessage } from "../util/error"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -57,20 +58,40 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
 // means the file exists but couldn't be used, so it's backed up (renamed with
 // a `.corrupt-<timestamp>` suffix) rather than silently treated as empty and
 // overwritten on the next save, which would destroy whatever was in it.
+// If the backup itself fails, this throws instead of returning an empty list,
+// because the unusable file is still in place and a later save would
+// overwrite it (see backupUnusableFile).
 // Exported (and operating on a real filePath, not a mocked one) so the actual
 // save/load/corruption-recovery behavior can be tested against the real
 // filesystem, not just the error-classification logic underneath it.
 export async function loadBookmarks(filePath: string): Promise<LocalBookmark[]> {
+  let data: unknown
   try {
-    const data = await readJson<unknown>(filePath)
-    if (!data || typeof data !== "object") return []
-    const items = (data as Record<string, unknown>).items
-    if (!Array.isArray(items)) return []
-    return items.filter(isLocalBookmark)
+    data = await readJson<unknown>(filePath)
   } catch (error) {
     if (isMissingFileError(error)) return []
-    await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
+    await backupUnusableFile(filePath)
     return []
+  }
+  // Valid JSON, but not the { items: [...] } this app writes: back it up too,
+  // the same as invalid JSON (reported in code review by Inseo).
+  const items = data && typeof data === "object" ? (data as Record<string, unknown>).items : undefined
+  if (!Array.isArray(items)) {
+    await backupUnusableFile(filePath)
+    return []
+  }
+  return items.filter(isLocalBookmark)
+}
+
+// Moves a bookmark.json that exists but can't be used out of the way (renamed
+// with a `.corrupt-<timestamp>` suffix), so the next save can't overwrite it.
+// If the rename fails, the original is still there, so this throws to tell the
+// caller not to save over it, instead of silently carrying on.
+export async function backupUnusableFile(filePath: string) {
+  try {
+    await rename(filePath, `${filePath}.corrupt-${Date.now()}`)
+  } catch (error) {
+    throw new Error(`Couldn't back up unreadable ${path.basename(filePath)}: ${errorMessage(error)}`, { cause: error })
   }
 }
 
@@ -706,6 +727,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const filePath = path.join(paths.state, "bookmark.json")
       const state = {
         pending: false,
+        // Set when bookmark.json couldn't be read *or* backed up at startup.
+        // The original file is still on disk, so this session never saves
+        // over it; every save fails with this message instead.
+        blocked: undefined as string | undefined,
       }
       // The last state this session knows it shared with disk - either what
       // it loaded at startup, or the result of its own last successful save.
@@ -720,6 +745,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       // session saving around the same time doesn't silently clobber this
       // session's bookmarks (or vice versa).
       async function save() {
+        if (state.blocked) throw new Error(state.blocked)
         if (!bookmarkStore.ready) {
           state.pending = true
           return
@@ -736,6 +762,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((items) => {
           baseline = items
           setBookmarkStore("items", items)
+        })
+        .catch((error) => {
+          state.blocked = `Bookmarks can't be saved this session: ${errorMessage(error)}`
+          toast.show({ message: state.blocked, variant: "error" })
         })
         .finally(() => {
           setBookmarkStore("ready", true)

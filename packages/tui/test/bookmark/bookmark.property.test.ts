@@ -6,7 +6,7 @@
 // shows that every property actually ran and how many inputs it checked.
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import fc from "fast-check"
-import { mkdtemp, readdir, readFile, rm, writeFile } from "fs/promises"
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "fs/promises"
 import os from "os"
 import path from "path"
 import {
@@ -265,9 +265,10 @@ test("R3: loading keeps exactly the valid bookmarks from a file with broken entr
 })
 
 // R3 (invariant): a missing, wrong-shape, or corrupted bookmark.json always
-// loads as an empty list instead of crashing, and a corrupted file is backed
-// up with its exact contents, so a restart never silently destroys bookmarks.
-test("R3: an unreadable bookmark.json loads as empty and a corrupted one is backed up", async () => {
+// loads as an empty list instead of crashing, and a wrong-shape or corrupted
+// file is backed up with its exact contents, so a restart never silently
+// destroys bookmarks.
+test("R3: an unreadable bookmark.json loads as empty and is backed up", async () => {
   const runs = 100
   await fc.assert(
     fc.asyncProperty(
@@ -291,7 +292,9 @@ test("R3: an unreadable bookmark.json loads as empty and a corrupted one is back
 
         expect(await loadBookmarks(file)).toEqual([])
 
-        if (input.kind === "corrupt") {
+        // Updated after code review (Inseo): a wrong-shape file is backed up
+        // exactly like a corrupted one, so a later save can't overwrite it.
+        if (input.kind !== "missing") {
           const backups = (await readdir(folder)).filter((name) => name.startsWith("bookmark.json.corrupt-"))
           expect(backups).toHaveLength(1)
           expect(await readFile(path.join(folder, backups[0]!), "utf8")).toBe(input.content)
@@ -301,6 +304,39 @@ test("R3: an unreadable bookmark.json loads as empty and a corrupted one is back
     { numRuns: runs },
   )
   report("R3", "invariant", runs)
+})
+
+// R3 (invariant), added after code review (Inseo): if an unusable
+// bookmark.json can't be backed up, loading must fail loudly and leave the
+// original file exactly as it was, instead of returning an empty list that a
+// later save would write over it. The folder is made read-only so the backup
+// rename fails. (Skipped as root, where read-only folders don't block renames.)
+const isRoot = process.getuid?.() === 0
+test.skipIf(isRoot)("R3: a failed backup is reported and leaves the original file untouched", async () => {
+  const runs = 50
+  await fc.assert(
+    fc.asyncProperty(
+      fc.oneof(
+        fc.constantFrom("null", "42", "[]", '{"items":3}'),
+        fc.string({ maxLength: 40 }).map((s) => '{"items":[' + s.replace(/[\]}]/g, "")),
+      ),
+      async (content) => {
+        const folder = await mkdtemp(path.join(dir, "readonly-"))
+        const file = path.join(folder, "bookmark.json")
+        await writeFile(file, content)
+        await chmod(folder, 0o555)
+        try {
+          await expect(loadBookmarks(file)).rejects.toThrow("Couldn't back up")
+          expect(await readFile(file, "utf8")).toBe(content)
+          expect(await readdir(folder)).toEqual(["bookmark.json"])
+        } finally {
+          await chmod(folder, 0o755)
+        }
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R3", "invariant (failed backup)", runs)
 })
 
 // R3 (round-trip), added in P5 red team (kills slaman's A2): the app never
@@ -329,6 +365,60 @@ test("R3: a rename survives the app's save path (merge, save, load)", async () =
     { numRuns: runs },
   )
   report("R3", "round-trip (save path)", runs)
+})
+
+// R3 (model/oracle), added after code review (Inseo) widened the Stryker scope
+// to mergeBookmarks: every save merges this session's list with what another
+// open OpenCode window may have written. Two sessions start from the same
+// saved list; each removes some bookmarks and adds new ones, and this session
+// also renames some. The oracle builds the expected result by hand: a bookmark
+// removed by either session stays removed (never comes back from a stale
+// copy), bookmarks added by either session are kept, and this session's
+// renames win. Then it saves and loads, like a restart.
+test("R3: saving merges another open session's changes without losing or bringing back bookmarks", async () => {
+  const runs = 100
+  let n = 0
+  await fc.assert(
+    fc.asyncProperty(
+      bookmarkList().chain((base) => {
+        const ids = base.map((b) => b.id)
+        const added = (prefix: string) =>
+          fc.uniqueArray(bookmark, { selector: (b) => b.id, maxLength: 4 }).map((bs) => bs.map((b) => ({ ...b, id: `${prefix}${b.id}` })))
+        return fc.record({
+          base: fc.constant(base),
+          mineRemoved: fc.subarray(ids),
+          theirsRemoved: fc.subarray(ids),
+          mineRenamed: fc.subarray(ids).chain((r) => fc.tuple(...r.map((id) => fc.tuple(fc.constant(id), customName)))),
+          mineAdded: added("mine_"),
+          theirsAdded: added("theirs_"),
+        })
+      }),
+      async ({ base, mineRemoved, theirsRemoved, mineRenamed, mineAdded, theirsAdded }) => {
+        let mine = base.filter((b) => !mineRemoved.includes(b.id))
+        for (const [id, name] of mineRenamed) mine = renameBookmark(mine, id, name)
+        mine = [...mine, ...mineAdded]
+        const theirs = [...base.filter((b) => !theirsRemoved.includes(b.id)), ...theirsAdded]
+
+        // Oracle, written independently of mergeBookmarks.
+        const removed = new Set([...mineRemoved, ...theirsRemoved])
+        const expected = [
+          ...mine.filter((b) => !removed.has(b.id)),
+          ...theirsAdded,
+        ]
+        const byId = (list: LocalBookmark[]) => [...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+        const merged = mergeBookmarks(base, mine, theirs)
+        expect(byId(merged)).toEqual(byId(expected))
+
+        // And it survives a save and a restart.
+        const file = path.join(dir, `two-sessions-${n++}.json`)
+        await saveBookmarks(file, merged)
+        expect(byId(await loadBookmarks(file))).toEqual(byId(expected))
+      },
+    ),
+    { numRuns: runs },
+  )
+  report("R3", "model/oracle (two sessions)", runs)
 })
 
 // R1 (model/oracle), added in P5 red team (kills slaman's A3): the bookmark
