@@ -2,9 +2,13 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test test/cli/run/permission.shared.test.ts"
+    "command": "bun test test/cli/run/permission.shared.test.ts test/tool/write.test.ts"
   },
-  "mutate": ["src/cli/cmd/run/tool.ts:929-954", "src/cli/cmd/run/permission.shared.ts:80-84"],
+  "mutate": [
+    "src/cli/cmd/run/tool.ts:929-954",
+    "src/cli/cmd/run/permission.shared.ts:80-84",
+    "src/tool/write.ts:62-63"
+  ],
   "coverageAnalysis": "off",
   "timeoutMS": 15000,
   "reporters": ["html", "clear-text", "progress"]

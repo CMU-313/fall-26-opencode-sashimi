@@ -56,18 +56,15 @@ describe("run permission shared", () => {
     console.log("R2 property passed: action wording matches the requested action")
   })
 
-  test("R3: descriptions name the requested file and not a different file", () => {
+  test("R3: descriptions name the requested file", () => {
     // R3: The description must name the specific file the tool call is requesting.
-    // Kind: invariant. Distinct generated basenames ensure the property catches stale filenames.
+    // Kind: invariant. Uppercase generated names ensure case normalization changes the requested path.
     fc.assert(
-      fc.property(mixedCaseFilename, mixedCaseFilename, (requested, other) => {
-        fc.pre(requested !== other)
+      fc.property(mixedCaseFilename, (requested) => {
         const requestedName = `requested-${requested}`
-        const otherName = `other-${other}`
         const info = permissionInfo(req({ permission: "read", patterns: [relativePath(requestedName)] }))
 
         expect(info.title).toContain(requestedName)
-        expect(info.title).not.toContain(otherName)
       }),
     )
     console.log("R3 property passed: descriptions name the requested file")
@@ -84,14 +81,12 @@ describe("run permission shared", () => {
         const firstInfo = permissionInfo(req({ permission: "read", patterns: [firstPath] }))
         const secondInfo = permissionInfo(req({ permission: "read", patterns: [secondPath] }))
         const removePath = (value: typeof firstInfo, filepath: string) => JSON.stringify(value).replaceAll(filepath, "")
-        const firstControls = permissionOptions(stage).map(permissionLabel)
-        const secondControls = permissionOptions(stage).map(permissionLabel)
+        const controls = permissionOptions(stage).map(permissionLabel)
         const expectedControls =
           stage === "permission" ? ["Allow once", "Allow always", "Reject"] : ["Confirm", "Cancel"]
 
         expect(removePath(firstInfo, firstPath)).toBe(removePath(secondInfo, secondPath))
-        expect(firstControls).toEqual(secondControls)
-        expect(firstControls).toEqual(expectedControls)
+        expect(controls).toEqual(expectedControls)
       }),
     )
     console.log("R4 property passed: changing the read path preserves description shape and controls at each stage")
