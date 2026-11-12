@@ -42,7 +42,7 @@ Patches are in `mutants/afels/`. Each mutant changes `packages/tui/src/context/l
 
 ## Stryker comparison
 
-Config: `packages/tui/stryker.config.json` mutates the bookmark logic in `packages/tui/src/context/local.tsx` (lines 30–145) and runs only the property tests (`bun test test/bookmark`). Reports: `mutants/afels/mutation-initial.html` (before strengthening) and `mutants/afels/mutation.html` (final).
+Config: `packages/tui/stryker.afels.config.json` mutates the bookmark logic in `packages/tui/src/context/local.tsx` (lines 30–145) and runs only the property tests (`bun test test/bookmark`). Reports: `mutants/afels/mutation-initial.html` (before strengthening) and `mutants/afels/mutation.html` (final).
 
 **Seed:** fast-check is seeded with `fc.configureGlobal({ seed: 42 })` at the top of the property test file, so every run (both Stryker runs and the hand-written mutant runs) uses the same generated inputs and a mutant is killed or survives the same way each time.
 
