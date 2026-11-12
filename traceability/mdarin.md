@@ -132,3 +132,87 @@ Arguments are grouped where the reason is the same; each group names every mutan
 - **Hand-written finds semantic alternatives.** Specific-wins, fail-open versus fail-closed, parent-counts-as-inside: each is a coherent different design that a developer might argue for, and each is tied to a specific interview note. Stryker cannot propose a different algorithm, and it cannot reach code outside the package. Writing H1 also produced the one genuinely new finding of the project, that the interviewees' preferred semantics would let an earlier allow defeat a later catch-all deny.
 - **Stryker finds weak oracles and dead generators.** Every Stryker-only kill came from the same two causes: an assertion that checked one field or one direction (`not.toBe("allow")`, `Exit.isFailure` with no look at the error, `requests[0].permission` with no look at the rest), or a generator that never produced a class of input (no stray whitespace, no non-bash permission, no missing options, no ask rules). I did not find any of those by hand because when I write a mutant I think about the code's logic, not about what my test is failing to look at.
 - **Prediction misses line up with the split.** My hand-written misses (H1's R3 kill, H4's R4 survival) were about which properties compare against an independent oracle and which compare `evaluate` to itself. Stryker's survivors were about what the oracle actually inspects. Both point at the same conclusion for the retrospective: the R1 shuffle and insert properties and the original R3 harmless property are self-referential and killed nothing on their own.
+
+## P5: Agent failure case
+
+**Property:** R1 "shuffling rules that do not compete for a command leaves its outcome unchanged", in `test/permission/order.property.test.ts`, written by Claude Code during P4. Its sibling, "a rule that cannot match the command can be inserted anywhere without effect", has the same weakness.
+
+### Transcript excerpt
+
+Session: https://claude.ai/code/session_01KxYVnVVvXAytWbBrTBodSL (the link Claude Code put in the P4 commit trailers).
+
+> **User, 2026-11-06 00:49:** What should we do next
+>
+> **Claude Code, 00:50:** Next is the R2 round-trip property. [...] After that, two more to reach four:
+> - R3 invariant: `rm -rf` never evaluates to allow for any ruleset. Fails today. Fix is a small dangerous-command check in the ask path, giving you a second code change.
+> - R1 metamorphic, revised: swapping two rules that don't both match a command changes nothing. Passes today. Also add the "specific beats general regardless of order" version, watch it fail, and record that you kept the code because last-match-wins is documented. That is your test-side triage.
+>
+> **User:** Do that quickly
+>
+> **User, 00:53:** Go and make them separate commits
+>
+> **Claude Code, 00:54:** All 115 permission tests pass with the fix, including the three new invariant properties. Committing R3, then writing the R1 order property.
+
+The property as first written in that turn (`order.test.ts`, later renamed):
+
+```ts
+function matches(permission: string, cmd: string, r: PermissionV1.Rule) {
+  return Wildcard.match(permission, r.permission) && Wildcard.match(cmd, r.pattern)
+}
+
+test("metamorphic: shuffling rules that do not compete for a command leaves its outcome unchanged", () => {
+  fc.assert(
+    fc.property(command, ruleset, fc.infiniteStream(fc.nat()), (cmd, rules, seeds) => {
+      // Keep at most one rule that matches this command so no two rules compete.
+      const first = rules.findIndex((r) => matches("bash", cmd, r))
+      const kept = rules.filter((r, i) => i === first || !matches("bash", cmd, r))
+      const shuffled = [...kept]
+      // ... Fisher-Yates shuffle using seeds ...
+      expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(Permission.evaluate("bash", cmd, kept))
+    }),
+    { numRuns: 300 },
+  )
+})
+```
+
+### The mutant it let survive
+
+H2, `mutants/mdarin/H2-strict-equality.patch`: the regex test at the end of `Wildcard.match` replaced by plain string equality, so no glob ever matches anything. The property passed all 300 runs. H1 (specific-wins), H3, and H4 (fallback deny and allow) also passed it.
+
+### Why the property was too weak
+
+The property was a textbook metamorphic relation and it met every requirement the P4 handout set out: it named the requirement, stated its kind, used generators with a documented vocabulary, and passed in CI. The problem is that the relation it chose was not one this code could violate. Last-match-wins is order-dependent only between rules that compete, and the property removed the competition before shuffling, so it checked the one thing the evaluator could not get wrong. In this context a metamorphic property needed an anchor, either an independent oracle for the outcome or a relation that a plausible bug would actually break, and it had neither. The agent applied the pattern correctly and the pattern did not apply.
+
+Two concrete flaws follow from that. First, the assertion is `evaluate` on both sides, so any function that is order-independent satisfies it, including one that returns ask for everything; it is always-passing with respect to the outcome. Second, "which rules compete" was computed with `Wildcard.match`, the matcher inside `evaluate`, so under H2 the test's own premise broke in step with the code: `matches` said no `*` rule matched `rm`, `kept` dropped them all, both sides fell through to the default ask, and the assertion held.
+
+The Stryker data says the same thing. In run 1 the shuffle property killed 2 of 128 mutants (#3 and #5, which make every rule match every command), both of which R5 and the insert property also killed, and it killed none of the seven hand-written mutants. R5's evaluate oracle killed 9 on its own; R2 killed 33. The agent's own proposal shows the cause: it chose the property because it "passes today", and I accepted it on the same evidence without asking what would make it fail.
+
+### Strengthened version
+
+The naive glob oracle that R5 already used is now shared from `test/permission/glob.ts`, and both R1 properties use it in two places. `matches` decides competition with `oracleMatch` instead of `Wildcard.match`, so which rules are kept no longer depends on the code under test, and each property adds a second assertion pinning the outcome to `oracleEvaluate` over the kept rules:
+
+```ts
+function matches(permission: string, cmd: string, r: PermissionV1.Rule) {
+  return oracleMatch(permission, r.permission) && oracleMatch(cmd, r.pattern)
+}
+// ...
+expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(Permission.evaluate("bash", cmd, kept))
+// With at most one competing rule, the outcome is pinned by the oracle, not by evaluate itself.
+expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(oracleEvaluate("bash", cmd, kept))
+```
+
+### Evidence it kills the mutant
+
+With H2 applied (`git apply mutants/mdarin/H2-strict-equality.patch`) and `bun test test/permission/order.property.test.ts` run from `packages/opencode`:
+
+```
+Counterexample: ["rm",[{"permission":"bash","pattern":"*","action":"allow"}],Stream(…)]
+(fail) R1: shuffling rules that do not compete for a command leaves its outcome unchanged [8.00ms]
+Counterexample: ["rm",[{"permission":"bash","pattern":"*","action":"allow"}],{"permission":"bash","pattern":"x","action":"allow"},0]
+(fail) R1: a rule that cannot match the command can be inserted anywhere without effect [1.17ms]
+Counterexample: ["rm","allow"]
+(fail) R1: when two rules compete, the later one wins regardless of specificity [0.78ms]
+Ran 3 tests across 1 file.
+```
+
+Both previously blind properties now fail on the first sample, `rm` under a catch-all allow: the oracle says the `*` rule matches and expects allow, the mutated evaluator returns ask. With the patch reverted, all 14 properties and all 122 tests under `test/permission` pass, and typecheck is clean.
