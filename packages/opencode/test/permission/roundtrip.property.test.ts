@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import fc from "fast-check"
-import { Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -41,8 +41,10 @@ const word = fc.constantFrom("rm", "ls", "git", "npm", "push", "-r", "-la", "a.t
 const command = fc.array(word, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
 const token = fc.oneof(word, fc.constant("*"), word.map((w) => w + "*"))
 const pattern = fc.array(token, { minLength: 1, maxLength: 4 }).map((tokens) => tokens.join(" "))
+// Rules for another permission ride along so the error's rule list is shown
+// to be filtered to the permission that was asked for.
 const rule = fc.record({
-  permission: fc.constant("bash"),
+  permission: fc.constantFrom("bash", "edit"),
   pattern,
   action: fc.constantFrom<PermissionV1.Action>("allow", "deny"),
 })
@@ -80,7 +82,11 @@ it.instance(
             const deny: PermissionV1.Rule = { permission: "bash", pattern: cmd, action: "deny" }
 
             const blocked = await ask(cmd, [...base, deny])
-            expect(Exit.isFailure(blocked)).toBe(true)
+            if (!Exit.isFailure(blocked)) throw new Error("expected the deny rule to block the command")
+            // The error carries the bash rules that applied, so the user can see which one blocked them.
+            const err = Cause.squash(blocked.cause)
+            expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+            expect((err as PermissionV1.DeniedError).ruleset).toEqual([...base, deny].filter((r) => r.permission === "bash"))
             expect(seen).toHaveLength(0)
 
             // Undo: evaluate the same command with the deny rule removed.
@@ -103,6 +109,69 @@ it.instance(
         ),
       )
       console.log("R2 round-trip property: deny, remove, retry held for 100 runs")
+    }),
+  { git: true },
+  60000,
+)
+
+// R3 (acceptance criterion): a command that resolves to "ask" prompts the user
+// instead of running. The decide-level R3 properties stop one call short of
+// this; here the service itself must park the request until someone replies.
+// Kind: invariant
+//
+// Generators: any base ruleset plus a trailing ask rule for the command, so
+// the ask wins regardless of what the base said.
+it.instance(
+  "R3: an ask rule parks the command on a prompt until the user replies",
+  () =>
+    Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const context = yield* Effect.context()
+
+      const pendingOne = Effect.gen(function* () {
+        while (true) {
+          const list = yield* permission.list()
+          if (list.length === 1) return list[0]
+          yield* Effect.sleep("10 millis")
+        }
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "1 second",
+          orElse: () => Effect.fail(new Error("timed out waiting for the permission prompt")),
+        }),
+      )
+
+      yield* Effect.promise(() =>
+        fc.assert(
+          fc.asyncProperty(command, ruleset, async (cmd, base) => {
+            await Effect.runPromiseWith(context)(
+              Effect.gen(function* () {
+                const fiber = yield* permission
+                  .ask({
+                    sessionID: SessionID.make("session_test"),
+                    permission: "bash",
+                    patterns: [cmd],
+                    metadata: {},
+                    always: [],
+                    ruleset: [...base, { permission: "bash", pattern: cmd, action: "ask" }],
+                  })
+                  .pipe(Effect.exit, Effect.forkChild)
+
+                // The request is waiting for a human, and nothing resolves it on its own.
+                const request = yield* pendingOne
+                expect(request).toMatchObject({ permission: "bash", patterns: [cmd] })
+                expect(fiber.pollUnsafe()).toBeUndefined()
+
+                yield* permission.reply({ requestID: request.id, reply: "reject" })
+                expect(Exit.isFailure(yield* Fiber.join(fiber))).toBe(true)
+                expect(yield* permission.list()).toHaveLength(0)
+              }),
+            )
+          }),
+          { numRuns: 50 },
+        ),
+      )
+      console.log("R3 ask property: ask rules prompted and waited for a reply for 50 runs")
     }),
   { git: true },
   60000,

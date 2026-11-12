@@ -30,7 +30,10 @@ const it = testEffect(LayerNode.compile(CrossSpawnSpawner.node))
 // traversal out of the project (C-3's "unrelated directories") is reached
 // often, and from sibling and parent directories of the instance. The oracle
 // for "inside" is a plain prefix check on the resolved path, independent of
-// the FSUtil.contains helper the code uses.
+// the FSUtil.contains helper the code uses. The call's options are generated
+// too: a missing target or an explicit bypass must never ask, and the kind
+// decides whether the request covers the path itself or its parent.
+const kinds = fc.option(fc.constantFrom<"file" | "directory">("file", "directory"), { nil: undefined })
 const segment = fc.constantFrom("src", "a", "b.txt", "main.py", "node_modules", "..", ".")
 const relative = fc.array(segment, { minLength: 1, maxLength: 5 }).map((parts) => parts.join(path.sep))
 
@@ -66,20 +69,25 @@ it.instance(
 
       yield* Effect.promise(() =>
         fc.assert(
-          fc.asyncProperty(target, async (file) => {
-            const inside = file === root || file.startsWith(root + path.sep)
+          fc.asyncProperty(fc.option(target, { nil: undefined }), kinds, fc.boolean(), async (file, kind, bypass) => {
             const { requests, ctx } = makeCtx()
-            await Effect.runPromiseWith(context)(assertExternalDirectoryEffect(ctx, file))
+            // Omit the options object entirely when nothing is set, as most callers do.
+            const options = kind === undefined ? (bypass ? { bypass } : undefined) : { kind, bypass }
+            const flagged = await Effect.runPromiseWith(context)(assertExternalDirectoryEffect(ctx, file, options))
 
-            if (inside) {
+            const inside = file !== undefined && (file === root || file.startsWith(root + path.sep))
+            expect(flagged).toBe(!(file === undefined || bypass || inside))
+            if (file === undefined || bypass || inside) {
               expect(requests).toHaveLength(0)
               return
             }
-            expect(requests).toHaveLength(1)
-            expect(requests[0].permission).toBe("external_directory")
-            for (const pattern of requests[0].patterns) {
-              expect(Permission.evaluate("external_directory", pattern, defaults).action).not.toBe("allow")
-            }
+            // Exactly one request, for the containing directory (or the directory itself) and nothing broader.
+            const dir = kind === "directory" ? file : path.dirname(file)
+            const glob = path.join(dir, "*")
+            expect(requests).toEqual([
+              { permission: "external_directory", patterns: [glob], always: [glob], metadata: { filepath: file, parentDir: dir } },
+            ])
+            expect(Permission.evaluate("external_directory", glob, defaults).action).not.toBe("allow")
           }),
           { numRuns: 200 },
         ),
