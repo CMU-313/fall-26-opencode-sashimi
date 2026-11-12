@@ -14,6 +14,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { Locale } from "../util/locale"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -84,14 +85,18 @@ export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
 export function removeBookmark(items: LocalBookmark[], id: string) {
   return items.filter((item) => item.id !== id)
 }
-//If a bookmark with a specific id already exists it is removed, otherwise a new one is created
-//result exists so the correct message is shown depending on whether we are looking at a 
-//current bookmark or a non existing one
-export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
-  const exists = items.some((item) => item.id === entry.id)
+// Bookmarks a response. If that response is already bookmarked, the list is
+// returned unchanged along with the existing bookmark, so the caller can tell
+// the user it's already saved instead of creating a duplicate (R4).
+// (This used to be a toggle that removed the bookmark on a second press; the
+// R4 property found that, and bookmarks are now removed from the list.)
+export function addBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
+  const existing = items.find((item) => item.id === entry.id)
+  if (existing) return { items, result: "exists" as const, existing }
   return {
-    items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
-    result: exists ? ("removed" as const) : ("added" as const),
+    items: [...items, { ...entry, createdAt: Date.now() }],
+    result: "added" as const,
+    existing: undefined,
   }
 }
 
@@ -112,6 +117,30 @@ export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: stri
 // ordering can be tested without spinning up the full local context.
 export function sortBookmarks(items: LocalBookmark[]) {
   return items.toSorted((a, b) => b.createdAt - a.createdAt)
+}
+
+// The text a bookmark saves for a response: its visible text parts, in order,
+// joined with newlines. Synthetic parts (added by OpenCode, not written by the
+// model) and non-text parts like tool calls are left out. Pulled out of the
+// bookmark command (routes/session/index.tsx) so R1 can be property-tested.
+export function bookmarkText(parts: ReadonlyArray<{ type: string; text?: string; synthetic?: boolean }>) {
+  return parts
+    .filter((part) => part.type === "text" && !part.synthetic)
+    .map((part) => part.text ?? "")
+    .join("\n")
+    .trim()
+}
+
+// The default title of an unnamed bookmark: the start of its text, with runs
+// of whitespace collapsed to one space, cut to 80 characters.
+export function bookmarkSnippet(text: string) {
+  return Locale.truncate(text.replace(/\s+/g, " ").trim(), 80)
+}
+
+// What the bookmark list shows for a bookmark: its custom name if it has one,
+// otherwise the snippet. Shared by the list and the rename prompt.
+export function bookmarkTitle(bookmark: Pick<LocalBookmark, "name" | "text">) {
+  return bookmark.name || bookmarkSnippet(bookmark.text)
 }
 
 // Reconciles two TUI sessions writing to the same bookmark.json at once.
@@ -730,17 +759,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             throw error
           }
         },
-        async toggle(entry: Omit<LocalBookmark, "createdAt">) {
+        async add(entry: Omit<LocalBookmark, "createdAt">) {
           const previous = bookmarkStore.items
-          const { items, result } = toggleBookmark(bookmarkStore.items, entry)
-          setBookmarkStore("items", items)
+          const added = addBookmark(bookmarkStore.items, entry)
+          // Already bookmarked: nothing changed, so there is nothing to save.
+          if (added.result === "exists") return added
+          setBookmarkStore("items", added.items)
           try {
             await save()
           } catch (error) {
             setBookmarkStore("items", previous)
             throw error
           }
-          return result
+          return added
         },
         async rename(id: string, name: string) {
           const previous = bookmarkStore.items

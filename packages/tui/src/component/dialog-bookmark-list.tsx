@@ -2,9 +2,8 @@ import { createMemo } from "solid-js"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
-import { useLocal } from "../context/local"
+import { bookmarkTitle, useLocal } from "../context/local"
 import { useToast } from "../ui/toast"
-import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 import { DialogBookmarkRename } from "./dialog-bookmark-rename"
 
@@ -22,7 +21,7 @@ export function DialogBookmarkList() {
       const label = new Date(bookmark.createdAt).toDateString()
       return {
         //Names become small snippet of response if they don't have a name 
-        title: bookmark.name || Locale.truncate(bookmark.text.replace(/\s+/g, " ").trim(), 80),
+        title: bookmarkTitle(bookmark),
         value: bookmark.id,
         //Since bookmarks are grouped by date created, those created today get assigned
         // to today instead of the date string
