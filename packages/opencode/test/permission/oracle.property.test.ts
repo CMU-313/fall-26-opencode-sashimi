@@ -3,6 +3,7 @@ import fc from "fast-check"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
+import { oracleMatch, oracleEvaluate } from "./glob"
 
 // Fixed seed so Stryker runs are reproducible (P5).
 fc.configureGlobal({ seed: 42 })
@@ -11,27 +12,9 @@ fc.configureGlobal({ seed: 42 })
 // reference implementation to ensure commands are correctly allowed or denied.
 // Kind: model / oracle
 //
-// The real evaluator compiles each pattern to a regex; this oracle is a naive
-// character-by-character glob walk. Any disagreement between the two on a
+// The real evaluator compiles each pattern to a regex; the oracle in glob.ts is
+// a naive character-by-character walk. Any disagreement between the two on a
 // generated input is a bug in one of them.
-function glob(str: string, pattern: string): boolean {
-  if (pattern === "") return str === ""
-  if (pattern[0] === "*") return glob(str, pattern.slice(1)) || (str !== "" && glob(str.slice(1), pattern))
-  if (str === "") return false
-  if (pattern[0] === "?" || pattern[0] === str[0]) return glob(str.slice(1), pattern.slice(1))
-  return false
-}
-
-// Mirrors the documented special case: "ls *" also matches a bare "ls".
-function oracleMatch(str: string, pattern: string) {
-  if (pattern.endsWith(" *")) return glob(str, pattern) || glob(str, pattern.slice(0, -2))
-  return glob(str, pattern)
-}
-
-function oracleEvaluate(permission: string, pattern: string, rules: PermissionV1.Rule[]): PermissionV1.Rule {
-  const matched = rules.filter((rule) => oracleMatch(permission, rule.permission) && oracleMatch(pattern, rule.pattern))
-  return matched.at(-1) ?? { action: "ask", permission, pattern: "*" }
-}
 
 // Generators: a small vocabulary of real shell words so generated patterns
 // actually collide with generated commands. Drawing from all strings would

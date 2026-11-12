@@ -1,8 +1,8 @@
 import { test, expect } from "bun:test"
 import fc from "fast-check"
-import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
+import { oracleMatch, oracleEvaluate } from "./glob"
 
 // Fixed seed so Stryker runs are reproducible (P5).
 fc.configureGlobal({ seed: 42 })
@@ -32,8 +32,12 @@ const rule = fc.record({
 })
 const ruleset = fc.array(rule, { minLength: 1, maxLength: 6 })
 
+// Strengthened in P5. The original used Wildcard.match here, so the property
+// compared the evaluator against itself and passed even when matching was
+// broken outright (hand-written mutant H2). Deciding which rules compete with
+// the independent oracle, and anchoring the outcome to it, closes that gap.
 function matches(permission: string, cmd: string, r: PermissionV1.Rule) {
-  return Wildcard.match(permission, r.permission) && Wildcard.match(cmd, r.pattern)
+  return oracleMatch(permission, r.permission) && oracleMatch(cmd, r.pattern)
 }
 
 test("R1: shuffling rules that do not compete for a command leaves its outcome unchanged", () => {
@@ -49,6 +53,8 @@ test("R1: shuffling rules that do not compete for a command leaves its outcome u
         ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
       }
       expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(Permission.evaluate("bash", cmd, kept))
+      // With at most one competing rule, the outcome is pinned by the oracle, not by evaluate itself.
+      expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(oracleEvaluate("bash", cmd, kept))
     }),
     { numRuns: 300 },
   )
@@ -61,6 +67,7 @@ test("R1: a rule that cannot match the command can be inserted anywhere without 
       fc.pre(!matches("bash", cmd, extra))
       const inserted = rules.toSpliced(at % (rules.length + 1), 0, extra)
       expect(Permission.evaluate("bash", cmd, inserted)).toEqual(Permission.evaluate("bash", cmd, rules))
+      expect(Permission.evaluate("bash", cmd, inserted)).toEqual(oracleEvaluate("bash", cmd, rules))
     }),
     { numRuns: 300 },
   )
