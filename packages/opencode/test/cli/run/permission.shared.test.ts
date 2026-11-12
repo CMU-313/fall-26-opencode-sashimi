@@ -29,6 +29,7 @@ function req(input: Partial<PermissionRequest> = {}): PermissionRequest {
 
 describe("run permission shared", () => {
   const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,20}\.tsx$/)
+  const mixedCaseFilename = fc.stringMatching(/^[A-Z][a-zA-Z0-9_-]{0,20}\.tsx$/)
   const relativePath = (name: string) => `src/components/${name}`
 
   test("R2: descriptions identify the requested read, write, or edit action", () => {
@@ -59,7 +60,7 @@ describe("run permission shared", () => {
     // R3: The description must name the specific file the tool call is requesting.
     // Kind: invariant. Distinct generated basenames ensure the property catches stale filenames.
     fc.assert(
-      fc.property(filename, filename, (requested, other) => {
+      fc.property(mixedCaseFilename, mixedCaseFilename, (requested, other) => {
         fc.pre(requested !== other)
         const requestedName = `requested-${requested}`
         const otherName = `other-${other}`

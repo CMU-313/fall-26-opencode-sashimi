@@ -4,6 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
+import fc from "fast-check"
 import { WriteTool } from "../../src/tool/write"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -60,6 +61,40 @@ const run = Effect.fn("WriteToolTest.run")(function* (
 })
 
 describe("tool.write", () => {
+  it.instance("counts blank lines in generated write permission metadata", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+      const next: Tool.Context = {
+        ...ctx,
+        ask: (request) =>
+          Effect.sync(() => {
+            requests.push(request)
+          }),
+      }
+      const line = fc.stringMatching(/^[a-z]{1,8}$/)
+      const inputs = fc.sample(
+        fc.tuple(
+          fc.array(line, { minLength: 1, maxLength: 5 }),
+          fc.array(line, { minLength: 1, maxLength: 5 }),
+          fc.boolean(),
+        ),
+        { numRuns: 20, seed: 42 },
+      )
+
+      for (const [index, [before, after, trailingNewline]] of inputs.entries()) {
+        const lines = [...before, "", ...after]
+        const content = `${lines.join("\n")}${trailingNewline ? "\n" : ""}`
+        yield* run({ filePath: path.join(test.directory, `blank-lines-${index}.txt`), content }, next)
+        expect(requests[index]?.metadata).toMatchObject({
+          operation: "write",
+          exists: false,
+          lineCount: lines.length,
+        })
+      }
+    }),
+  )
+
   it.instance("provides write action, file existence, and line count in permission metadata", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
@@ -204,6 +239,30 @@ describe("tool.write", () => {
 
         expect(result.metadata).toHaveProperty("filepath", filepath)
         expect(result.metadata).toHaveProperty("exists", true)
+      }),
+    )
+
+    it.instance("reports an existing empty file as existing in permission metadata", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "empty-existing.txt")
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+        const next: Tool.Context = {
+          ...ctx,
+          ask: (request) =>
+            Effect.sync(() => {
+              requests.push(request)
+            }),
+        }
+
+        yield* Effect.promise(() => fs.writeFile(filepath, "", "utf-8"))
+        yield* run({ filePath: filepath, content: "replacement\n" }, next)
+
+        expect(requests[0]?.metadata).toMatchObject({
+          operation: "write",
+          exists: true,
+          lineCount: 1,
+        })
       }),
     )
   })

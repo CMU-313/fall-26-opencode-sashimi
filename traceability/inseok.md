@@ -58,6 +58,20 @@ The response also claimed the property “doesn't validate that the size informa
 
 **Strengthened property:** The R5-PRIVACY property now also asserts `info.title` equals `Write existing file ${filepath}` for its generated write request. This checks that the title identifies the operation and target without appending line-by-line narration. Reapplying H6 and running the same focused command then produced **10 passing tests and 1 failing test**; the R5-PRIVACY property failed with seed 42 and shrank to `lines = ["AAAAA"]`, `name = "a.tsx"`. H6 was reverted after this run. The strengthened property and passing control behavior are in `packages/opencode/test/cli/run/permission.shared.test.ts`, and the reproducible mutant is saved as `mutants/inseok/H6.patch`.
 
+## Red Team
+
+**Attacker:** Emma Ma (zm), in “Red Team Attacks,” against commit `8df7d020c8b82b153535bc67f878c89a3be6a0a4`. The three received patches are preserved as `mutants/inseok/red-team/EmmaMa/RT1.patch` through `RT3.patch`.
+
+All three attacks survived the original command `cd packages/opencode && bun --no-install test test/cli/run/permission.shared.test.ts test/tool/write.test.ts`: **27 passed, 0 failed** per attack in this checkout. They were not equivalent; the properties missed mixed-case paths and producer metadata for blank-line and empty-file cases.
+
+| Mutant | Requirement and received change | Original result | Strengthening and result |
+|---|---|---|---|
+| RT1 | R3: lower-case the chosen read path before displaying it. | Survived: original focused command passed 27 tests. | Changed R3's filename generator to produce mixed-case names beginning with an uppercase letter. With RT1 applied, the command failed R3 (28 passed, 1 failed); fast-check shrank to `A.tsx` and `A_.tsx`. |
+| RT2 | R5: calculate `lineCount` by filtering empty strings from the content's newline split. | Survived: original focused command passed 27 tests; formatter-only R5 inputs directly supplied line counts and did not exercise the write tool metadata producer. | Added generated end-to-end write metadata cases with a guaranteed interior blank line, varying surrounding nonempty lines and trailing newline. With RT2 applied, the command failed the metadata property (28 passed, 1 failed); a generated 9-line input was reported as 8. |
+| RT3 | R6: report `exists` as true only when the file exists and its prior contents are nonempty. | Survived: original focused command passed 27 tests; R6 passed `exists` directly to the formatter, and the old producer test overwrote a nonempty file. | Added a write-tool case that overwrites an existing zero-byte file and asserts permission metadata still has `exists: true`. With RT3 applied, the command failed this assertion (28 passed, 1 failed), reporting `exists: false`. |
+
+After strengthening, the unmutated focused command passed **29 tests, 0 failed**. Each received patch was reapplied separately and killed by its corresponding strengthened property; all three patches were then reverted. The tests exercise the actual write tool for RT2 and RT3, not just the formatter.
+
 ## Stryker Run & Comparison
 
 The property test uses fast-check seed **42** via `fc.configureGlobal({ seed: 42 })`. Stryker 10.1.1 was run from `packages/opencode` with `bunx stryker run stryker.inseok.config.json`; the command runner ran only `bun test test/cli/run/permission.shared.test.ts`, and the mutation scope was limited to the permission formatter and option-list source ranges in that package. The final run used a 15-second mutant timeout to avoid scheduling-related timeouts. The HTML report is saved at `mutants/inseok/mutation.html`.
