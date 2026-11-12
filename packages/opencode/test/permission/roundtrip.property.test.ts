@@ -12,6 +12,9 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
+// Fixed seed so Stryker runs are reproducible (P5).
+fc.configureGlobal({ seed: 42 })
+
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
   AppNodeBuilder.build(

@@ -6,3 +6,7 @@ app.log
 script/build-*.ts
 temporary-*.md
 .artifacts
+
+# Stryker mutation testing output (P5)
+reports
+.stryker-tmp

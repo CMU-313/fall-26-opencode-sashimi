@@ -3,6 +3,9 @@ import fc from "fast-check"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
 
+// Fixed seed so Stryker runs are reproducible (P5).
+fc.configureGlobal({ seed: 42 })
+
 // R3: Certain commands should require user approval before executing, even if
 // they are permitted by the config.
 // Kind: invariant

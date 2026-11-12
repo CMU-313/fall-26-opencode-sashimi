@@ -4,6 +4,9 @@ import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Permission } from "../../src/permission"
 
+// Fixed seed so Stryker runs are reproducible (P5).
+fc.configureGlobal({ seed: 42 })
+
 // R5: Permission evaluation should be testable against a simpler, independent
 // reference implementation to ensure commands are correctly allowed or denied.
 // Kind: model / oracle

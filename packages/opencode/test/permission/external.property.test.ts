@@ -12,6 +12,9 @@ import { TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
+// Fixed seed so Stryker runs are reproducible (P5).
+fc.configureGlobal({ seed: 42 })
+
 const it = testEffect(LayerNode.compile(CrossSpawnSpawner.node))
 
 // R4: By default, agents should only have read/write access to the repository
