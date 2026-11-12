@@ -13,6 +13,8 @@ import {
   permissionRun,
 } from "@/cli/cmd/run/permission.shared"
 
+fc.configureGlobal({ seed: 42 })
+
 function req(input: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
     id: "perm-1",
@@ -72,24 +74,26 @@ describe("run permission shared", () => {
 
   test("R4: changing only a read path preserves the description shape and approval controls", () => {
     // R4: When only the requested file changes, the rest of the description and control options must remain identical.
-    // Kind: metamorphic. Vary both paths while holding permission and all other request data constant.
+    // Kind: metamorphic. Vary the paths and stage while checking each stage's expected controls.
     fc.assert(
-      fc.property(filename, filename, (first, second) => {
+      fc.property(filename, filename, fc.constantFrom("permission", "always"), (first, second, stage) => {
         fc.pre(first !== second)
         const firstPath = relativePath(first)
         const secondPath = relativePath(second)
         const firstInfo = permissionInfo(req({ permission: "read", patterns: [firstPath] }))
         const secondInfo = permissionInfo(req({ permission: "read", patterns: [secondPath] }))
         const removePath = (value: typeof firstInfo, filepath: string) => JSON.stringify(value).replaceAll(filepath, "")
-        const firstControls = permissionOptions("permission").map(permissionLabel)
-        const secondControls = permissionOptions("permission").map(permissionLabel)
+        const firstControls = permissionOptions(stage).map(permissionLabel)
+        const secondControls = permissionOptions(stage).map(permissionLabel)
+        const expectedControls =
+          stage === "permission" ? ["Allow once", "Allow always", "Reject"] : ["Confirm", "Cancel"]
 
         expect(removePath(firstInfo, firstPath)).toBe(removePath(secondInfo, secondPath))
         expect(firstControls).toEqual(secondControls)
-        expect(firstControls).toEqual(["Allow once", "Allow always", "Reject"])
+        expect(firstControls).toEqual(expectedControls)
       }),
     )
-    console.log("R4 property passed: changing the read path preserves description shape and controls")
+    console.log("R4 property passed: changing the read path preserves description shape and controls at each stage")
   })
 
   test("R5: write descriptions report content size without exposing written content", () => {
@@ -124,7 +128,73 @@ describe("run permission shared", () => {
         },
       ),
     )
+
+    fc.assert(
+      fc.property(
+        fc.array(fc.stringMatching(/^[A-Z]{5,20}$/), { minLength: 1, maxLength: 30 }),
+        filename,
+        (lines, name) => {
+          const filepath = relativePath(name)
+          const content = lines.join("\n")
+          const info = permissionInfo(
+            req({
+              permission: "edit",
+              patterns: [filepath],
+              metadata: {
+                filepath,
+                operation: "write",
+                diff: content,
+              },
+            }),
+          )
+
+          expect(info.lines).toEqual([])
+          expect(info.diff).toBeUndefined()
+          expect(JSON.stringify(info)).not.toContain(content)
+        },
+      ),
+    )
     console.log("R5 property passed: write descriptions summarize content without exposing it")
+  })
+
+  test("R5-PRIVACY: write content must not appear in description and diff must not be exposed", () => {
+    // R5 privacy: generated write content must not appear in permission description, and write diff must not be exposed.
+    // Kind: invariant. Property specific to privacy aspect of R5 - ensures content and diffs are hidden.
+    fc.assert(
+      fc.property(
+        fc.array(fc.stringMatching(/^[A-Z]{5,20}$/), { minLength: 1, maxLength: 30 }),
+        filename,
+        (lines, name) => {
+          const content = lines.join("\n")
+          const filepath = relativePath(name)
+          const info = permissionInfo(
+            req({
+              permission: "edit",
+              patterns: [filepath],
+              metadata: {
+                filepath,
+                operation: "write",
+                lineCount: lines.length,
+                diff: content,
+              },
+            }),
+          )
+
+          // Privacy: generated write content must not appear in the permission description
+          expect(JSON.stringify(info)).not.toContain(content)
+          for (const line of lines) {
+            expect(JSON.stringify(info)).not.toContain(line)
+          }
+
+          // Privacy: write diff must not be exposed
+          expect(info.diff).toBeUndefined()
+          expect(info.lines).toEqual([`Content: ${lines.length} line${lines.length === 1 ? "" : "s"}`])
+          // Also reject title narration of individual line changes.
+          expect(info.title).toBe(`Write existing file ${filepath}`)
+        },
+      ),
+    )
+    console.log("R5-PRIVACY property passed: write content and diff are fully hidden")
   })
 
   test("R6: write descriptions distinguish new files from existing files", () => {
