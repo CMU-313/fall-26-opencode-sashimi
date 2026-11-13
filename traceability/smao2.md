@@ -77,3 +77,78 @@ All changes were to property generators and assertions, not example-based tests.
 | R2 title-length restriction | The original property only checked that the title had at most five words, without checking which words were retained. | Added an exact assertion that the saved title equals the first five generated words. | Incorrect truncation boundaries and dropped words |
 
 The strengthened properties killed two additional Stryker mutants, increasing the mutation score from 64.86% to 70.27%. The remaining survivors primarily concern command isolation, response-part validation, regex matching, redundant trimming, and error logging.
+
+### Agent Failure
+
+| Test | Original implementation | Whitespace mutant |
+|---|---|---|
+| OpenCode-generated property | PASS | PASS |
+| Strengthened P2 property | PASS | FAIL (mutant killed) |
+
+I first ran the OpenCode-generated property against the original implementation. It passed with 1 test passing, 0 failures, and 100 assertions.
+
+I then manually applied the Stryker mutation `.split(/\s+/)` → `.split(/\s/)` and reran the same property. It still passed with 1 test passing, 0 failures, and 100 assertions, demonstrating that the agent-generated property could not detect the mutation.
+
+Finally, I ran my strengthened P2 persistence property against the same mutant. The test failed with the following counterexample:
+
+```text
+Expected: "ntlwn cch jpsefxbvpn"
+Received: "ntlwn   cch "
+
+0 pass
+9 filtered out
+1 fail
+5 expect() calls
+```
+
+The mutant incorrectly preserved consecutive spaces and truncated the generated title. My strengthened property detected the difference because it generates irregular whitespace and checks the exact normalized title.
+
+This demonstrates that the OpenCode-generated property was insufficient because of its restricted generator, whereas the strengthened property successfully killed the mutant.
+
+OpenCode test: PASSED
+  it.instance(
+    "Property: every valid 2-5 word title is saved verbatim",
+    () =>
+      Effect.gen(function* () {
+        const titles = fc.sample(titleArb, {
+          numRuns: 20,
+          seed: 707,
+        })
+
+        for (const title of titles) {
+          const actual = yield* runAutoname(
+            `RENAMED: ${title}`,
+            ["Discussing code"],
+          )
+
+          expect(actual.title).toBe(title)
+        }
+      }),
+    120_000,
+  )
+
+✓ /autoname: real command with controlled LLM responses > Property: every valid 2-5 word title is saved verbatim [9959.63ms]
+
+Strengthened test: FAILED
+  it.instance(
+    "P2 - Persistence: generated titles are saved and whitespace is normalized",
+    () =>
+      Effect.gen(function* () {
+        const cases = fc.sample(
+          fc.tuple(renameResponseArb, historyArb),
+          { numRuns: 12, seed: 313 },
+        )
+
+        for (const [rename, history] of cases) {
+          const actual = yield* runAutoname(
+            rename.response,
+            history,
+          )
+
+          expect(actual.title).toBe(rename.expected)
+        }
+      }),
+    120_000,
+  )
+
+✗ /autoname: real command with controlled LLM responses > P2 - Persistence: generated titles are saved and whitespace is normalized [4519.72ms]
