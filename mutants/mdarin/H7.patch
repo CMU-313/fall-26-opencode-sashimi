@@ -1,0 +1,12 @@
+diff --git a/packages/core/src/fs-util.ts b/packages/core/src/fs-util.ts
+index 93a551c..ddf8a28 100644
+--- a/packages/core/src/fs-util.ts
++++ b/packages/core/src/fs-util.ts
+@@ -269,6 +269,6 @@ export namespace FSUtil {
+ 
+   export function contains(parent: string, child: string) {
+     const result = relative(parent, child)
+-    return result === "" || (!isAbsolute(result) && result !== ".." && !result.startsWith(`..${sep}`))
++    return result === "" || (!isAbsolute(result) && !result.startsWith(`..${sep}`))
+   }
+ }

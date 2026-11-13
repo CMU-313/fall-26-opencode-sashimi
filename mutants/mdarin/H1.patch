@@ -1,0 +1,20 @@
+diff --git a/packages/opencode/src/permission/index.ts b/packages/opencode/src/permission/index.ts
+index e2b0ca5..4d437ff 100644
+--- a/packages/opencode/src/permission/index.ts
++++ b/packages/opencode/src/permission/index.ts
+@@ -29,10 +29,12 @@ interface State {
+ }
+ 
+ export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
++  const matched = rulesets
++    .flat()
++    .filter((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern))
++  const specificity = (rule: PermissionV1.Rule) => rule.pattern.replaceAll("*", "").length
+   return (
+-    rulesets
+-      .flat()
+-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
++    matched.toSorted((a, b) => specificity(a) - specificity(b)).at(-1) ?? {
+       action: "ask",
+       permission,
+       pattern: "*",

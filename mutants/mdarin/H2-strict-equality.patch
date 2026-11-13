@@ -1,0 +1,11 @@
+diff --git a/packages/core/src/util/wildcard.ts b/packages/core/src/util/wildcard.ts
+index 0a67817..05370a8 100644
+--- a/packages/core/src/util/wildcard.ts
++++ b/packages/core/src/util/wildcard.ts
+@@ -10,5 +10,5 @@ export function match(input: string, pattern: string) {
+ 
+   if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?"
+ 
+-  return new RegExp("^" + escaped + "$", process.platform === "win32" ? "si" : "s").test(normalized)
++  return normalized === escaped
+ }

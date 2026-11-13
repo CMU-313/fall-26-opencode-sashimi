@@ -63,4 +63,10 @@ const Replied = define({
   type: "permission.replied",
   schema: { sessionID: SessionID, requestID: ID, reply: Reply },
 })
-export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
+// Published when a permission that was denied earlier in this instance is no
+// longer denied, so the user can see that a config change enabled it.
+const Unblocked = define({
+  type: "permission.unblocked",
+  schema: { sessionID: SessionID, permission: Schema.String, pattern: Schema.String, rule: Rule },
+})
+export const Event = { Asked, Replied, Unblocked, Definitions: inventory(Asked, Replied, Unblocked) }

@@ -1,0 +1,220 @@
+# Traceability: mdarin
+
+Feature: Permissions. Team: Sashimi. Branch: `mdarin/properties`. PR: https://github.com/CMU-313/fall-26-opencode-sashimi/pull/34
+
+Property tests live in `packages/opencode/test/permission/` and run with `bun test test/permission` from `packages/opencode`. All five properties and their generators were written with Claude Code; I reviewed each one and own its correctness.
+
+## Requirements
+
+| ID | Interview evidence | Requirement | Acceptance criteria | Changed in P4? | Property | Test | Mutants it kills |
+|---|---|---|---|---|---|---|---|
+| R1 | C-7 suggested asking for clarification or reporting an error on conflicting rules. O-7/O-8, S-7/S-8, C-6/C-7 all agreed order should not matter but gave different resolution rules. | Reordering rules that do not compete for a command never changes its outcome, and the last rule wins if there is a conflict. This is the already existing behavior. | With `[{"*": "allow"}, {"git *": "deny"}, {"npm *": "allow"}]` and the command `git push`, swapping the `*` and `npm *` rules still denies. Swapping `*` and `git *` allows, because they compete and the later one wins. | Yes | Metamorphic: shuffling non-competing rules, or inserting a rule that cannot match, never changes a command's outcome; competing rules resolve last-wins. | `test/permission/order.property.test.ts` (3 properties, `R1:` prefix) |
+| R2 | S-6, C-5, O-6: all agreed a notice would be useful. | Removing a blocking rule should give a notice/warning if something runs that was actually blocked by it earlier in the same session. | With `{"rm *": "deny"}`, `rm test.txt` is denied. After removing the rule and retrying, the command runs and a notice says a permission change enabled a previously blocked command. | Yes (scoped) | Round-trip: for any ruleset and command, appending a deny rule blocks it silently; removing it restores the original outcome and publishes exactly one `permission.unblocked` event carrying the removed rule; repeating the command publishes nothing more. | `test/permission/roundtrip.property.test.ts` (`R2:`) |
+| R3 | S-3: recursive delete such as `rm -rf` should never execute unless overridden by the user. | Certain commands should require user approval before executing, even if they are permitted by the config. | With `{"*": "allow"}`, running `rm -rf .` prompts the user for approval instead of running. | Yes (acceptance criterion only) | Invariant: for any `rm -rf` spelling and any ruleset, the decision is never allow; a deny still wins; commands that are not recursive force deletes are decided exactly as before. | `test/permission/dangerous.property.test.ts` (5 properties, `R3:`) and the ask-prompt property in `roundtrip.property.test.ts` |
+| R4 | C-3: agents should not bypass restrictions or access unrelated directories and repositories. | By default, agents should only have read/write access to the repository root directory and its subdirectories, assuming the agent is launched in a repository. | In `projects/p1`, the agent can modify `projects/p1/main.py` but is blocked from reading or writing `projects/p2/main.py`. | No | Invariant: for any target path, the tool layer requests `external_directory` permission exactly when the path resolves outside the instance directory, including via `..` traversal, and the default agent rules never grant that permission outright. | `test/permission/external.property.test.ts` (`R4:`) |
+| R5 | O-10, S-10, C-9: all agreed a simple string-matching reference implementation could be used for testing. | Permission evaluation should be testable against a simpler, independent reference implementation to ensure commands are correctly allowed or denied. | Over at least 100 command and rule combinations, OpenCode's evaluator and an independent string-matching implementation agree; any mismatch is investigated. | No | Model / oracle: `Wildcard.match` and `Permission.evaluate` agree with a naive character-by-character glob walk that picks the last matching rule and defaults to ask, over 500 generated inputs; evaluating several rulesets equals evaluating their concatenation. | `test/permission/oracle.property.test.ts` (3 properties, `R5:`) |
+
+## Requirement changes
+
+| ID | Original (P3) | Revised (P4) | Why it changed |
+|---|---|---|---|
+| R1 | When a command matches several rules, the program asks for clarification, and modifies the file with new rules. | Reordering rules that do not compete for a command never changes its outcome, and the last rule wins if there is a conflict. This is the already existing behavior. | Feasibility and conflict. An interactive clarification prompt that rewrites the config would need a new TUI flow, and it contradicts the documented "last matching rule wins" semantics that every example config in the permissions docs relies on, such as `{"*": "ask", "rm *": "deny"}`. Changing that would cause a lot of issues for users with existing config files. The three interviewees also disagreed on the resolution rule (error, most specific wins, any allow wins). What they agreed on was that order should not cause surprises. The revision keeps that: order only matters between rules that genuinely overlap, which is the documented behavior, and the property makes it explicit. |
+| R2 | Removing a blocking rule should give a notice/warning if something runs that would have been blocked by it. | Mostly unchanged, but a command has to have actually been blocked previously, and the notice is scoped to one session. | Feasibility. The only part that could not be built is "would have been blocked": opencode is not able to access the changes in config files easily, and nothing records what an old config would have decided. So the notice fires only when the same command was actually denied earlier in the session and is now not denied. The session scope was not specified in P3 and is now explicit. S-6, C-5, O-6 all wanted the notice, and O-6's case of accidentally deleting a line is exactly what this catches. |
+| R3 | Acceptance criterion: the user must type and enter "yes" to a dedicated confirmation prompt. | Acceptance criterion: the command goes through the existing permission "ask" prompt instead of being allowed. | Feasibility. Mostly buildable as written, but the separate approval screen where you type "yes" is not feasible; it would duplicate the ask flow that already exists for every tool call. The requirement text is unchanged; the acceptance criterion now uses the existing override mechanism, which is what S-3 asked for ("users should be able to override"). |
+
+R4 and R5 are kept as written. R2's implementation: the permission service now remembers rules that denied a command in the running instance and publishes a `permission.unblocked` event when the same command is later not denied; the TUI shows it as a notification. R4 is kept as written; opencode already implements it through the `external_directory` permission, and the property checks that boundary against an independent prefix oracle.
+
+## Step 3: run, triage, and fix
+
+| Failure | Outcome | What I did |
+|---|---|---|
+| R3 invariant failed on the first run. Shrunk counterexample: `rm -rf .` with `{"*": "allow"}` evaluates to allow. | Code bug | Added `Permission.decide` in `packages/opencode/src/permission/index.ts`. It wraps `evaluate` and downgrades allow to ask when the command is `rm` or `sudo rm` with both a recursive and a force flag in any spelling. The ask path now calls `decide`. Deny rules still win. |
+| R1 as written could not be expressed as a property, and "more specific wins regardless of order" fails against the code. | Requirement problem | Revised R1 (see Requirement changes) and added a property that pins last-wins for competing rules so the revision is explicit rather than silent. |
+| R2 round-trip hung on its first run. | Wrong test | Generated rulesets that matched nothing fell through to the default ask, which parks the request waiting for an interactive reply. Generators now seed every ruleset with a catch-all allow and use allow or deny only. |
+| R2 round-trip hung again in the full suite after the R3 fix landed. | Wrong test | The generator could produce `rm -rf x`, which `decide` now downgrades to ask. Removed recursive force flags from the round-trip vocabulary with a comment pointing at the R3 test. |
+| R2 first draft did not compile: Effect 4 beta has no `Effect.runtime`. | Wrong test | Capture the fiber context with `Effect.context()` and run each fast-check sample through `Effect.runPromiseWith(context)` so asks keep the instance-scoped state. |
+| Event manifest count tests in `packages/schema` and `packages/opencode` failed. | Wrong test | The schema test was already red on `main` because upstream `session.next.revert.*` events were never counted; `permission.unblocked` added one more. Updated the expected counts. |
+| `test/provider/header-timeout.test.ts` fails in the full suite. | Not related | Fails identically on clean `main`. Left alone and noted on the PR. |
+| PR review (P5): `dangerous()` only recognised bare `rm` and `sudo rm`, so `/bin/rm -rf .`, `env rm -rf .`, `command rm -rf .`, and `sudo -u me rm -rf .` were still allowed under `{"*": "allow"}`. The R3 generator only produced `rm` and `sudo rm`, so the property could not see it. | Code bug and narrow generator | Widened the `dangerous` generator with paths, wrappers, and a `VAR=value` prefix first; it failed on `sudo -u me rm -rf .`. Then changed `dangerous()` to find the first token whose basename is `rm` and read flags after it. Erring toward "ask" on something like `echo rm -rf .` is acceptable; missing a wrapped rm is not. |
+| PR review (P5): the R2 notice used `api.attention.notify` with `when: "blurred"`, so a focused terminal never saw it, and the wording said "enabled" even when the new outcome is ask. The R2 property checks the event, not the UI. | Code bug, outside the property's reach | Added an in-app toast alongside the OS notification and reworded it to "no longer blocks". The property stays at the event boundary; the TUI layer is example-tested. |
+
+R4 passed on its first run. Final state: all 119 tests under `test/permission` pass, typecheck is clean in `schema`, `opencode`, and `tui`, and the PR's test check passes. Each property prints a line when it completes so the CI log shows it ran, since the package's test script uses `--only-failures`.
+
+## P5: Hand-written mutants
+
+Patches live in `mutants/mdarin/H*.patch`, created with `git diff > mutants/mdarin/Hn.patch` and reverted with `git checkout --`. Predictions were written before any mutant was run. Each mutant was applied on its own and the five property files were run with `bun test test/permission` from `packages/opencode`. H1, H3, H5, H6, and H7 are the submitted five; H2 and H4 are kept because their prediction misses are the interesting part of the comparison.
+
+| ID | Requirement | Change | Predicted killer | Actual result |
+|---|---|---|---|---|
+| H1 | R1 | `Permission.evaluate` picks the matching rule with the most non-wildcard characters instead of the last match (stable sort, so ties still fall back to last-wins). This is the "more specific wins" semantics O-7, S-7, and C-6 asked for in P3. | R1 competing-rules property, and the R5 evaluate oracle. R1 shuffle and insert survive because they only ever keep one matching rule. | Killed by R1 competing-rules on test 1 (`rm`, allow), by both R5 evaluate oracles (`a.txt` with `[a.txt allow, * allow]`), and unexpectedly by R3 deny-still-wins on test 4: under specific-wins, a trailing `bash: * deny` loses to an earlier `rm*` allow, so `rm -rf .` runs. The R1 shuffle and insert properties survived as predicted. |
+| H2 | R5 | `Wildcard.match` compares the normalized input to the escaped pattern with `===`, so no globbing at all. | Most or all properties, since nearly every generator uses `*` patterns. | Killed by R5 (all three), R1 competing-rules, R3 deny-still-wins, R2 (by hanging: the catch-all allow stopped matching and the service parked on ask), and about 40 example tests. Five of eleven properties survived: R1 shuffle, R1 insert, and R3 harmless compare `evaluate` against itself, so any change to the matcher cancels out; R3 never-allow and R4 only assert "not allow", which an unmatched ask satisfies. Too blunt to count as a plausible fault, but it exposed the self-comparison weakness that H1 also hit. |
+| H3 | R5 | The fallback rule when nothing matches returns `deny` instead of `ask` (a "secure by default" change). | R5 evaluate oracle only; the oracle defaults to ask. R1 compares `evaluate` to itself, R3 asserts "not allow", R4's default ruleset always matches. | Killed by the R5 evaluate oracle and the merged-ruleset oracle (`rm` with an empty ruleset). Everything else survived. Prediction correct. |
+| H4 | R5 | The fallback rule when nothing matches returns `allow` instead of `ask` (fail-open). | R5 evaluate oracle, and R4 because an unmatched external path would now be allowed. | Killed by the two R5 evaluate oracles only. R4 survived: its default ruleset is `{"*": "allow", external_directory: {"*": "ask"}}`, so every `external_directory` pattern matches a rule and the fallback never fires. The property is correct about the real defaults but blind to the fallback. |
+| H5 | R2 | In `Permission.ask`, the `denied.delete(key)` after publishing `permission.unblocked` is removed, so the remembered denial is never cleared and the notice fires on every later run of the command. | R2 round-trip only; no other property listens for the event. | Killed by R2 on the first sample (`rm` with a catch-all allow): two events seen where one was expected. Also killed by the example test "publishes unblocked event when a previously denied pattern is no longer denied", which asks three times. Prediction correct. |
+| H6 | R4 | `assertExternalDirectoryEffect` returns early for every path, so the external-directory check is effectively removed. | R4 only. | Killed by R4 on the first external path (a `src` directory beside the project root). R1, R3, R5 survived. Prediction correct. |
+| H7 | R4 | `FSUtil.contains` drops the `result !== ".."` clause, so the project's direct parent counts as inside while the grandparent does not. A fence-post error on the exact boundary C-3 cared about. | R4 only, with some risk of survival if no generated path resolves to exactly the parent. | Killed by R4; the shrunk counterexample is the temp directory itself, the root's direct parent. R1, R3, R5 survived. Prediction correct. |
+
+What the hand-written round showed. Four of seven predictions were exactly right, and the three misses were all about the same thing: which properties compare the code against an independent oracle and which compare it against itself. The R1 shuffle and insert properties and the R3 harmless property are metamorphic over `evaluate` alone, so they cannot see any change to matching or to the fallback (H1, H2, H3, H4 all slipped past them). The R5 oracle and the R1 competing-rules property did the real work on the evaluator. H1's unpredicted R3 kill is a genuine finding: the interviewees' preferred "specific wins" semantics would let an earlier allow defeat a later catch-all deny, which is an argument for the R1 revision beyond feasibility. H4's R4 survival shows the R4 property only ever exercises matched rules, never the fallback.
+
+## P5: Stryker run and comparison
+
+Config: `packages/opencode/stryker.mdarin.config.json`. Command runner, pointed only at the five `test/permission/*.property.test.ts` files. Mutated scope: `src/permission/index.ts` lines 31-59 (`evaluate`, `decide`, `dangerous`) and 89-118 (the body of `Permission.ask` up to the prompt), plus `src/tool/external-directory.ts`. `Wildcard.match` and `FSUtil.contains` live in `packages/core`, outside the package Stryker runs in, so they are covered by the hand-written mutants H2 and H7 instead. Seed: `fc.configureGlobal({ seed: 42 })` at the top of each property file. Runs use `inPlace: true` because the sandbox copy breaks the workspace path aliases. Report: `mutants/mdarin/mutation.html`.
+
+### Run 1: before strengthening
+
+128 mutants, 79 killed, 49 survived, score 61.72% (permission/index.ts 77.53%, external-directory.ts 25.64%).
+
+### What I strengthened
+
+All changes are to properties and generators, not example tests.
+
+| Property | Weakness Stryker exposed | Change | Survivors it targets |
+|---|---|---|---|
+| R3 "rm -rf is never allowed outright" | The assertion was `expect(action).not.toBe("allow")`. A `decide` that returned `{}` (#22) or `{ action: "" }` (#23) passed it, because an empty action is also "not allow". | The property now evaluates the plain rule and asserts `decide` returns exactly that rule with `action` swapped to `ask` when it was allow, and the unchanged rule otherwise. The oracle is the full rule, not one field. | #22, #23 |
+| R3 generators | Every generated command had single spaces and no leading or trailing whitespace, so dropping `trim()` (#25) or splitting on one space instead of `\s+` (#26) was invisible. Targets never contained a hyphen, so loosening the flag regex anchors (#51, #52) was invisible. `harmless` never used `-rf` with a tool other than `rm`, so the `head !== "rm"` guard (#33) could be removed. | `dangerous` and `harmless` now wrap tokens in generated spacing (none, one, or two spaces at each gap and end). Targets include `my-dir` and `some-file.txt`. `harmless` has a second branch: `cp`, `chmod`, `rsync` with recursive-force flags, which must be decided purely by the rules. | #25, #26, #33, #51, #52 |
+| R2 round-trip | The blocked step only asserted `Exit.isFailure`. The error could carry an empty ruleset (#73), an unfiltered one (#74), or be built by a no-op filter (#75) and nothing noticed. All rules were `bash`, so filtering by permission had nothing to filter. | Rules now draw from `bash` and `edit`. The blocked step squashes the cause, asserts it is a `DeniedError`, and asserts its `ruleset` equals the input rules filtered to `bash`. | #73, #74, #75 |
+| R4 external directory | The property ignored the function's return value (#126), never passed `options` so `bypass` (#96, #98) and `kind` (#106 to #112) were dead, never passed an undefined target (#93, #94), and only checked `requests[0].permission`, so empty `patterns` (#123), empty `always` (#124), empty `metadata` (#125), and a blanked `*` glob (#117 to #120) all passed. | Generates `target` as optional, `kind` as `file`, `directory`, or absent, and `bypass` as a boolean. Asserts the boolean result equals "asked", and that the single request deep-equals the expected `{ permission, patterns: [dir/*], always: [dir/*], metadata: { filepath, parentDir } }` where `dir` depends on `kind`. | #93, #94, #96, #98, #106, #108 to #112, #117 to #120, #123 to #126 |
+
+### Run 2: after strengthening
+
+128 mutants, 100 killed, 28 survived, score 78.13% (index.ts 85.39%, external-directory.ts 61.54%). Every mutant the table above targeted was killed. The 28 left were sorted into three groups: seven that a property should kill, eighteen equivalent, and three accepted as out of scope.
+
+### Second round of strengthening
+
+| Property | Weakness | Change | Survivors it targets |
+|---|---|---|---|
+| R3 (new) "the downgrade applies to bash only" | Every R3 property called `decide` with permission `bash`, so making the downgrade apply to all permissions (#18, `permission !== "bash"` replaced by `false`) was invisible. | For `edit`, `read`, `webfetch` and any dangerous command, `decide` equals `evaluate`. | #18 |
+| R3 (new) "rm with only one of recursive or force is decided purely by the rules" | Replacing the recursive regex `[rR]` with `[^rR]` (#59) makes `rm -f x` dangerous. The harmless generator could produce that command, but under seed 42 never together with a rule that allowed it. | A dedicated generator of single-flag spellings (`-r`, `-R`, `-f`, `--recursive`, `--force`, `-rv`, `-fv`) with and without sudo and with untidy spacing, under a catch-all allow, must never be downgraded. This also killed #51, the dropped `^` anchor. | #59, #51 |
+| R4 options | The strengthened R4 property always passed an options object, so `options?.kind` and `options?.bypass` were never reached with `undefined` (#97, #107). | Omit the object entirely when neither option is set, which is how most callers invoke it. | #97, #107 |
+| R3 (new, ask level) "an ask rule parks the command on a prompt until the user replies" | The three ask-path mutants (#81 treat ask as allow, #85 never set `needsAsk`, #87 always return before prompting) survived because every property avoided ask rules so the service would not block. R3's acceptance criterion is literally "prompts the user for approval", and nothing checked the prompt. | For any command and base ruleset plus a trailing ask rule, forking `ask` yields exactly one pending request for that command, the fiber stays unresolved, rejecting the request fails the ask, and the pending list empties. Lives in `roundtrip.property.test.ts` because that file already wires the live service. | #81, #85, #87 |
+
+### Run 3: final
+
+128 mutants, 108 killed, 20 survived, raw score **84.38%** (index.ts 92.13%, external-directory.ts 66.67%). Seed 42 throughout. All 20 survivors are argued below. Treating the 18 equivalent mutants as not counting gives an adjusted score of 108 / 110 = **98.18%**; the remaining two (#66, #127) are accepted survivors, not claimed equivalent.
+
+### Equivalent and accepted survivors
+
+Arguments are grouped where the reason is the same; each group names every mutant it covers.
+
+**Windows-only branches (#99, #100, #102, #113, #114, #116, #117, #120), external-directory.ts lines 25 to 33.** These mutants are inside a `process.platform === "win32"` check, and I develop and run CI on macOS and Linux, so that branch never executes and no input can tell the mutant from the original. They are equivalent on every machine the tests run on, and killing them would need a Windows runner rather than a stronger property.
+
+**Flipped platform checks (#101, #115), lines 25 and 31.** These flip the platform check, so on macOS and Linux the code now calls `FSUtil.normalizePath` and `FSUtil.normalizePathPattern` instead of using the path as is. Both helpers begin with their own non-Windows guard and return the input untouched, so the result is identical here, while on Windows the same mutants would skip normalization that is required and would be real bugs.
+
+**Log and span strings (#61, #64, #65 in index.ts lines 89 and 96; #89 in external-directory.ts line 15).** Each one changes a string or object passed only to `Effect.fn` as a span name or to `Effect.logInfo` as a message. Nothing returned, published, or thrown depends on them, so no property or example test can observe the change.
+
+**Flag filter redundancy (#37, #40), index.ts line 55.** Removing the `startsWith("-")` filter, or filtering by `startsWith("")`, makes `flags` the full token list. The `has` helper on the next line only accepts a token that equals the long form exactly or passes `^-[A-Za-z]+$`, so a target like `a.txt` is rejected there anyway; the filter is a pre-check that `has` repeats.
+
+**Dropped `$` anchor (#52), line 57.** Without the end anchor, `^-[A-Za-z]+` also accepts a letter cluster followed by a non-letter, such as `-rf2`. Real rm rejects those as invalid options before deleting anything, so whether `decide` calls them dangerous has no effect on what runs. The matching `^` mutant (#51) was killed by the single-flag property because every token in `flags` already begins with a hyphen.
+
+**Blank default kind (#108), external-directory.ts line 28.** The default `"file"` becomes `""`. The only use of `kind` is the comparison `kind === "directory"`, and any other string takes the file branch, so the directory computed for the request is the same.
+
+**Accepted, not equivalent (#66, #127).** #66 changes the `"\0"` separator in the remembered-denial key to `""`, so the key is `permission + pattern`. It is only observable if two different permission and pattern pairs concatenate to the same string, such as `bas` + `hx` and `bash` + `x`; permission names are fixed identifiers, so that cannot occur, but I am not claiming it is impossible in principle. #127 empties the body of the promise wrapper `assertExternalDirectory`. The property has to call the Effect version because it needs the instance context, and the wrapper is one line exercised by the tool tests, so I left it to them.
+
+### Comparison: hand-written versus Stryker
+
+**Mutation score.** Raw 84.38% after three runs (61.72% before strengthening, 78.13% after the first round). Adjusted 98.18% with the 18 equivalent mutants removed. Seed 42, 128 mutants, report at `mutants/mdarin/mutation.html`.
+
+**Which of your hand-written mutants did Stryker never generate? Why not?**
+
+- **H1 (most specific rule wins).** Never generated. It replaces `findLast` with a sort by specificity, which is a different algorithm rather than a change to one token. Stryker's mutators flip operators, blank literals, and swap a fixed list of method names, and `findLast` is not on that list, so neither specific-wins nor first-wins (`find`) ever appeared.
+- **H3 and H4 (fallback deny / fallback allow).** Only approximately. Stryker's StringLiteral mutator blanks `"ask"` to `""` (#7, killed by R5) but never substitutes another valid action, so the two realistic fail-closed and fail-open variants were never tried.
+- **H2 (strict equality in `Wildcard.match`) and H7 (parent directory counts as inside).** Never generated because both live in `packages/core`, outside the package Stryker runs in. A per-package config cannot reach a workspace dependency, so the boundary logic in `FSUtil.contains` and the glob matcher are covered only by hand-written mutants.
+- **H5 and H6 were generated.** Stryker's #79 removes the `denied.delete(key)` call exactly as H5 does, and #105 forces `containsPath` to true as H6 does. Both were killed in run 1 by the same properties that killed the hand-written versions.
+
+**Which Stryker survivors would you never have thought of? Are any of them bugs a real developer might plausibly write?**
+
+- **#22 and #23, `decide` returning `{}` or an empty action.** I would never have written these; nobody returns an empty object from a decision function. They are not plausible bugs, but they exposed a plausible test weakness: `not.toBe("allow")` was accepting anything, and a future refactor that returned the wrong rule shape would have passed.
+- **#97 and #107, `options?.kind` becoming `options.kind`.** Did not occur to me, and very plausible: an editor "simplify" or a developer who assumes options is always passed. It would crash the tool layer for every caller that omits options.
+- **#81, #85, #87, the ask path treating ask as allow.** I had not thought about mutating the prompt path at all, because every property avoided it. #81 (`continue` on the wrong condition) is exactly the kind of bug a developer writes when reordering the loop, and its effect is that "ask" silently runs the command. That is the most dangerous survivor Stryker found and is now covered by the ask-level R3 property.
+- **#18, the downgrade losing its bash-only guard.** Plausible as a copy-paste when adding a second guarded permission. I had thought about the guard's other direction (H1's unexpected R3 kill) but not about it widening.
+- **The R4 request-shape mutants (#123 to #126, #117 to #120).** Blank patterns, blank `always`, empty metadata, wrong return value. I would not have hand-written any of these, and individually they are not realistic bugs, but together they showed the property was checking one field of a five-field request.
+
+**What does each approach find that the other doesn't?**
+
+- **Hand-written finds semantic alternatives.** Specific-wins, fail-open versus fail-closed, parent-counts-as-inside: each is a coherent different design that a developer might argue for, and each is tied to a specific interview note. Stryker cannot propose a different algorithm, and it cannot reach code outside the package. Writing H1 also produced the one genuinely new finding of the project, that the interviewees' preferred semantics would let an earlier allow defeat a later catch-all deny.
+- **Stryker finds weak oracles and dead generators.** Every Stryker-only kill came from the same two causes: an assertion that checked one field or one direction (`not.toBe("allow")`, `Exit.isFailure` with no look at the error, `requests[0].permission` with no look at the rest), or a generator that never produced a class of input (no stray whitespace, no non-bash permission, no missing options, no ask rules). I did not find any of those by hand because when I write a mutant I think about the code's logic, not about what my test is failing to look at.
+- **Prediction misses line up with the split.** My hand-written misses (H1's R3 kill, H4's R4 survival) were about which properties compare against an independent oracle and which compare `evaluate` to itself. Stryker's survivors were about what the oracle actually inspects. Both point at the same conclusion for the retrospective: the R1 shuffle and insert properties and the original R3 harmless property are self-referential and killed nothing on their own.
+
+## P5: Agent failure case
+
+**Property:** R1 "shuffling rules that do not compete for a command leaves its outcome unchanged", in `test/permission/order.property.test.ts`, written by Claude Code during P4. Its sibling, "a rule that cannot match the command can be inserted anywhere without effect", has the same weakness.
+
+### Transcript excerpt
+
+Session: https://claude.ai/code/session_01KxYVnVVvXAytWbBrTBodSL (the link Claude Code put in the P4 commit trailers).
+
+> **User, 2026-11-06 00:49:** What should we do next
+>
+> **Claude Code, 00:50:** Next is the R2 round-trip property. [...] After that, two more to reach four:
+> - R3 invariant: `rm -rf` never evaluates to allow for any ruleset. Fails today. Fix is a small dangerous-command check in the ask path, giving you a second code change.
+> - R1 metamorphic, revised: swapping two rules that don't both match a command changes nothing. Passes today. Also add the "specific beats general regardless of order" version, watch it fail, and record that you kept the code because last-match-wins is documented. That is your test-side triage.
+>
+> **User:** Do that quickly
+>
+> **User, 00:53:** Go and make them separate commits
+>
+> **Claude Code, 00:54:** All 115 permission tests pass with the fix, including the three new invariant properties. Committing R3, then writing the R1 order property.
+
+The property as first written in that turn (`order.test.ts`, later renamed):
+
+```ts
+function matches(permission: string, cmd: string, r: PermissionV1.Rule) {
+  return Wildcard.match(permission, r.permission) && Wildcard.match(cmd, r.pattern)
+}
+
+test("metamorphic: shuffling rules that do not compete for a command leaves its outcome unchanged", () => {
+  fc.assert(
+    fc.property(command, ruleset, fc.infiniteStream(fc.nat()), (cmd, rules, seeds) => {
+      // Keep at most one rule that matches this command so no two rules compete.
+      const first = rules.findIndex((r) => matches("bash", cmd, r))
+      const kept = rules.filter((r, i) => i === first || !matches("bash", cmd, r))
+      const shuffled = [...kept]
+      // ... Fisher-Yates shuffle using seeds ...
+      expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(Permission.evaluate("bash", cmd, kept))
+    }),
+    { numRuns: 300 },
+  )
+})
+```
+
+### The mutant it let survive
+
+H2, `mutants/mdarin/H2-strict-equality.patch`: the regex test at the end of `Wildcard.match` replaced by plain string equality, so no glob ever matches anything. The property passed all 300 runs. H1 (specific-wins), H3, and H4 (fallback deny and allow) also passed it.
+
+### Why the property was too weak
+
+The property was a textbook metamorphic relation and it met every requirement the P4 handout set out: it named the requirement, stated its kind, used generators with a documented vocabulary, and passed in CI. The problem is that the relation it chose was not one this code could violate. Last-match-wins is order-dependent only between rules that compete, and the property removed the competition before shuffling, so it checked the one thing the evaluator could not get wrong. In this context a metamorphic property needed an anchor, either an independent oracle for the outcome or a relation that a plausible bug would actually break, and it had neither. The agent applied the pattern correctly and the pattern did not apply.
+
+Two concrete flaws follow from that. First, the assertion is `evaluate` on both sides, so any function that is order-independent satisfies it, including one that returns ask for everything; it is always-passing with respect to the outcome. Second, "which rules compete" was computed with `Wildcard.match`, the matcher inside `evaluate`, so under H2 the test's own premise broke in step with the code: `matches` said no `*` rule matched `rm`, `kept` dropped them all, both sides fell through to the default ask, and the assertion held.
+
+The Stryker data says the same thing. In run 1 the shuffle property killed 2 of 128 mutants (#3 and #5, which make every rule match every command), both of which R5 and the insert property also killed, and it killed none of the seven hand-written mutants. R5's evaluate oracle killed 9 on its own; R2 killed 33. The agent's own proposal shows the cause: it chose the property because it "passes today", and I accepted it on the same evidence without asking what would make it fail.
+
+### Strengthened version
+
+The naive glob oracle that R5 already used is now shared from `test/permission/glob.ts`, and both R1 properties use it in two places. `matches` decides competition with `oracleMatch` instead of `Wildcard.match`, so which rules are kept no longer depends on the code under test, and each property adds a second assertion pinning the outcome to `oracleEvaluate` over the kept rules:
+
+```ts
+function matches(permission: string, cmd: string, r: PermissionV1.Rule) {
+  return oracleMatch(permission, r.permission) && oracleMatch(cmd, r.pattern)
+}
+// ...
+expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(Permission.evaluate("bash", cmd, kept))
+// With at most one competing rule, the outcome is pinned by the oracle, not by evaluate itself.
+expect(Permission.evaluate("bash", cmd, shuffled)).toEqual(oracleEvaluate("bash", cmd, kept))
+```
+
+### Evidence it kills the mutant
+
+With H2 applied (`git apply mutants/mdarin/H2-strict-equality.patch`) and `bun test test/permission/order.property.test.ts` run from `packages/opencode`:
+
+```
+Counterexample: ["rm",[{"permission":"bash","pattern":"*","action":"allow"}],Stream(…)]
+(fail) R1: shuffling rules that do not compete for a command leaves its outcome unchanged [8.00ms]
+Counterexample: ["rm",[{"permission":"bash","pattern":"*","action":"allow"}],{"permission":"bash","pattern":"x","action":"allow"},0]
+(fail) R1: a rule that cannot match the command can be inserted anywhere without effect [1.17ms]
+Counterexample: ["rm","allow"]
+(fail) R1: when two rules compete, the later one wins regardless of specificity [0.78ms]
+Ran 3 tests across 1 file.
+```
+
+Both previously blind properties now fail on the first sample, `rm` under a catch-all allow: the oracle says the `*` rule matches and expects allow, the mutated evaluator returns ask. With the patch reverted, all 14 properties and all 122 tests under `test/permission` pass, and typecheck is clean.
