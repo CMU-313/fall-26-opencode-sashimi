@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/session/reminders.ts b/packages/opencode/src/session/reminders.ts
+index e91b83a..e2567fb 100644
+--- a/packages/opencode/src/session/reminders.ts
++++ b/packages/opencode/src/session/reminders.ts
+@@ -120,7 +120,7 @@ function bumpedHintLevel(session: Session.Info, messageID: string) {
+   }
+   const previous = session.metadata?.hintLevel
+   const level = typeof previous === "number" ? previous : 0
+-  return Math.min(Math.max(level, 0) + 1, maxHintLevel)
++  return Math.max(level, 0) + 1
+ }
+ 
+ export function label(session?: Session.Info) {

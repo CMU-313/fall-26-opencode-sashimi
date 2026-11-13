@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test test/session/hint.property.test.ts"
+  },
+  "mutate": [
+    "src/session/reminders.ts:29-43",
+    "src/session/reminders.ts:114-130",
+    "src/agent/agent.ts:192-197"
+  ],
+  "coverageAnalysis": "off",
+  "timeoutMS": 20000,
+  "reporters": ["html", "clear-text", "progress"]
+}

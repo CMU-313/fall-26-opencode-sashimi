@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/context/local.tsx b/packages/tui/src/context/local.tsx
+index 19e3dac..8ee5bd7 100644
+--- a/packages/tui/src/context/local.tsx
++++ b/packages/tui/src/context/local.tsx
+@@ -102,7 +102,7 @@ export function addBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "
+ 
+ export function renameBookmark(items: LocalBookmark[], id: string, name: string) {
+   const trimmed = name.trim()
+-  return items.map((item) => (item.id === id ? { ...item, name: trimmed || undefined } : item))
++  return items.map((item) => (item.id === id ? { ...item, name: trimmed || item.name } : item))
+ }
+ 
+ // Removes every bookmark belonging to the given session, leaving bookmarks
