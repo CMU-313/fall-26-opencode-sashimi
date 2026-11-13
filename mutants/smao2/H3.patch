@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 779b614..ec950d4 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -1492,7 +1492,7 @@ const layer = Layer.effect(
+ 
+ 
+ if (input.command === "autoname") {
+-  for (const part of result.parts) {
++  for (const part of result.parts.slice(1)) {
+     if (part.type === "text" && typeof part.text === "string") {
+       const text = part.text
+       const match = text.match(/RENAMED:\s*(.+)/)

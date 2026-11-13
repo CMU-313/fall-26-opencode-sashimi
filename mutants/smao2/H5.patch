@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 779b614..8d3f283 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -1509,7 +1509,7 @@ if (input.command === "autoname") {
+         if (truncatedTitle) {
+           yield* sessions.setTitle({
+             sessionID: input.sessionID,
+-            title: truncatedTitle,
++            title: "auto generated truncatedTitle",
+           }).pipe(
+             Effect.catchCause((cause) =>
+               Effect.logError("autoname setTitle failed", {
