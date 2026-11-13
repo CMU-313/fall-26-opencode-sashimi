@@ -199,10 +199,27 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "edit") {
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
+              const operation =
+                typeof props.request.metadata?.operation === "string" ? props.request.metadata.operation : "edit"
+              const lineCount =
+                typeof props.request.metadata?.lineCount === "number" ? props.request.metadata.lineCount : undefined
+              const title =
+                operation === "write"
+                  ? props.request.metadata?.exists === false
+                    ? "Write new file"
+                    : "Write existing file"
+                  : "Edit"
               return {
                 icon: "→",
-                title: `Edit ${pathFormatter.format(filepath)}`,
-                body: <EditBody request={props.request} />,
+                title: `${title} ${pathFormatter.format(filepath)}`,
+                body:
+                  operation === "write" ? (
+                    <Show when={lineCount !== undefined}>
+                      <TextBody title={`Content: ${lineCount} line${lineCount === 1 ? "" : "s"}`} />
+                    </Show>
+                  ) : (
+                    <EditBody request={props.request} />
+                  ),
               }
             }
 

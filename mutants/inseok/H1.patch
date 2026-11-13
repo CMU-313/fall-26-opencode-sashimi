@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/cli/cmd/run/tool.ts b/packages/opencode/src/cli/cmd/run/tool.ts
+--- a/packages/opencode/src/cli/cmd/run/tool.ts
++++ b/packages/opencode/src/cli/cmd/run/tool.ts
+@@ -932,7 +932,7 @@ function permEdit(p: ToolPermissionProps<typeof EditTool>): ToolPermissionInfo {
+   const operation = text(p.metadata.operation)
+   const lineCount = num(p.metadata.lineCount)
+   const title =
+-    operation === "write" ? (p.metadata.exists === false ? "Write new file" : "Write existing file") : "Edit"
++    operation === "write" ? (p.metadata.exists === false ? "Write new file" : "Write existing file") : "Write"
+   return {
+     icon: "→",
+     title: `${title} ${toolPath(file, { home: true })}`,

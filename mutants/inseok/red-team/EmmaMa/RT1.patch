@@ -1,0 +1,9 @@
+diff --git a/packages/opencode/src/cli/cmd/run/tool.ts b/packages/opencode/src/cli/cmd/run/tool.ts
+--- a/packages/opencode/src/cli/cmd/run/tool.ts
++++ b/packages/opencode/src/cli/cmd/run/tool.ts
+@@ -946,4 +946,4 @@
+-  const file = p.input.filePath || p.patterns[0] || ""
++  const file = (p.input.filePath || p.patterns[0] || "").toLowerCase()
+   return {
+     icon: "→",
+     title: `Read ${toolPath(file, { home: true })}`,
