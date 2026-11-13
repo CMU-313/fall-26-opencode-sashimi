@@ -1,0 +1,12 @@
+diff --git a/packages/opencode/src/permission/index.ts b/packages/opencode/src/permission/index.ts
+index e2b0ca5..8046c51 100644
+--- a/packages/opencode/src/permission/index.ts
++++ b/packages/opencode/src/permission/index.ts
+@@ -103,7 +103,6 @@ const layer = Layer.effect(
+         }
+         const previous = denied.get(key)
+         if (previous) {
+-          denied.delete(key)
+           yield* events.publish(Event.Unblocked, {
+             sessionID: request.sessionID,
+             permission: request.permission,

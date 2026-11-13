@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test --timeout 60000 test/permission/order.property.test.ts test/permission/roundtrip.property.test.ts test/permission/dangerous.property.test.ts test/permission/external.property.test.ts test/permission/oracle.property.test.ts"
+  },
+  "mutate": [
+    "src/permission/index.ts:31-59",
+    "src/permission/index.ts:89-118",
+    "src/tool/external-directory.ts"
+  ],
+  "inPlace": true,
+  "coverageAnalysis": "off",
+  "timeoutMS": 90000,
+  "reporters": ["html", "clear-text", "progress"],
+  "htmlReporter": { "fileName": "reports/mutation/mutation.html" }
+}
