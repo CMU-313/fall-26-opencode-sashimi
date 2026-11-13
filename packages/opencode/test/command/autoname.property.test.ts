@@ -1,6 +1,7 @@
 
 import { describe, expect } from "bun:test"
 import fc from "fast-check"
+fc.configureGlobal({ seed: 42 })
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Effect, Layer } from "effect"

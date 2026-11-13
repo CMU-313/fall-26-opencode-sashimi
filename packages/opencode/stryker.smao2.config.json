@@ -1,0 +1,14 @@
+{
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test test/command/autoname.property.test.ts"
+  },
+  "mutate": [
+    "src/session/prompt.ts:1492-1525"
+  ],
+  "coverageAnalysis": "off",
+  "timeoutMS": 60000,
+  "timeoutFactor": 2,
+  "concurrency": 2,
+  "reporters": ["html", "clear-text", "progress"]
+}
