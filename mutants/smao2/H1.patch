@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 779b614..6feb47e 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -1503,7 +1503,7 @@ if (input.command === "autoname") {
+         // R2: Truncate titles to at most 5 words.
+         const truncatedTitle = title
+           .split(/\s+/)
+-          .slice(0, 5)
++          .slice(0, 6)
+           .join(" ")
+ 
+         if (truncatedTitle) {

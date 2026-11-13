@@ -1,6 +1,7 @@
 
 import { describe, expect } from "bun:test"
 import fc from "fast-check"
+fc.configureGlobal({ seed: 42 })
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Effect, Layer } from "effect"
@@ -209,6 +210,38 @@ const historyArb = fc.array(
   { minLength: 1, maxLength: 4 },
 )
 
+const whitespaceArb = fc.constantFrom(
+  " ",
+  "  ",
+  "   ",
+  "\t",
+  "\t ",
+  " \t ",
+)
+
+const titleWithWhitespaceArb = fc
+  .tuple(
+    fc.array(word, { minLength: 2, maxLength: 5 }),
+    whitespaceArb,
+    whitespaceArb,
+    whitespaceArb,
+  )
+  .map(([words, separator, leading, trailing]) => ({
+    expected: words.join(" "),
+    raw: leading + words.join(separator) + trailing,
+  }))
+
+// Vary whether whitespace appears after the RENAMED: marker.
+const renameResponseArb = fc
+  .tuple(
+    titleWithWhitespaceArb,
+    fc.constantFrom("", " ", "  ", "\t", "   "),
+  )
+  .map(([title, markerSpacing]) => ({
+    response: `RENAMED:${markerSpacing}${title.raw}`,
+    expected: title.expected,
+  }))
+
 // Execute the real /autoname command on a new session.
 const runAutoname = (response: string, history: string[]) =>
   Effect.gen(function* () {
@@ -396,19 +429,42 @@ describe("/autoname: real command with controlled LLM responses", () => {
   // PROPERTY 2: Title persistence
   // For any valid 2-5 word title returned by the test LLM,
   // /autoname must save exactly that title in the session.
+
   it.instance(
-    "P2 - Persistence: valid model-provided titles are saved correctly",
+    "P2 - Persistence: generated titles are saved and whitespace is normalized",
     () =>
       Effect.gen(function* () {
         const cases = fc.sample(
-          fc.tuple(titleArb, historyArb),
+          fc.tuple(renameResponseArb, historyArb),
           { numRuns: 12, seed: 313 },
         )
 
-        for (const [title, history] of cases) {
+        for (const [rename, history] of cases) {
+          const actual = yield* runAutoname(
+            rename.response,
+            history,
+          )
+
+          expect(actual.title).toBe(rename.expected)
+        }
+      }),
+    120_000,
+  )
+
+  // PROPERTY: every valid 2-5 word model-generated title is saved correctly
+  it.instance(
+    "Property: every valid 2-5 word title is saved verbatim",
+    () =>
+      Effect.gen(function* () {
+        const titles = fc.sample(titleArb, {
+          numRuns: 20,
+          seed: 707,
+        })
+
+        for (const title of titles) {
           const actual = yield* runAutoname(
             `RENAMED: ${title}`,
-            history,
+            ["Discussing code"],
           )
 
           expect(actual.title).toBe(title)
@@ -416,6 +472,7 @@ describe("/autoname: real command with controlled LLM responses", () => {
       }),
     120_000,
   )
+
 
   // PROPERTY 3: Extra-output tolerance
   // Adding an explanation after a valid RENAMED line should
@@ -469,38 +526,72 @@ describe("/autoname: real command with controlled LLM responses", () => {
     90_000,
   )
 
+  it.instance(
+    "P5 - Invariant: empty or whitespace-only titles are not persisted",
+    () =>
+      Effect.gen(function* () {
+        const responses = fc.sample(
+          fc.constantFrom(
+            "RENAMED:   ",
+            "RENAMED:      ",
+            "RENAMED:\t\t",
+            "RENAMED: \t ",
+          ),
+          { numRuns: 6, seed: 405 },
+        )
+
+        for (const response of responses) {
+          const actual = yield* runAutoname(
+            response,
+            ["Help me improve my code"],
+          )
+
+          expect(actual.title).toBe(
+            "Original session title",
+          )
+        }
+      }),
+    90_000,
+  )
+
+
 
   // PROPERTY R2: Title length restriction
   // Every generated title must contain fewer than 5 words.
   // Pattern: Invariant / boundary testing.
+
   it.instance(
-    "R2 - Invariant: generated title contains fewer than 5 words",
+    "R2 - Invariant: generated titles are truncated to at most five words",
     () =>
       Effect.gen(function* () {
-        const titles = fc.sample(
+        const cases = fc.sample(
           fc.array(word, {
-            minLength: 1,
-            maxLength: 8,
-          }).map((words) => words.join(" ")),
+            minLength: 2,
+            maxLength: 9,
+          }),
           { numRuns: 12, seed: 207 },
         )
 
-        for (const title of titles) {
+        for (const words of cases) {
+          const response = `RENAMED: ${words.join(" ")}`
+          const expected = words.slice(0, 5).join(" ")
+
           const actual = yield* runAutoname(
-            `RENAMED: ${title}`,
+            response,
             ["Help me improve my code"],
           )
 
-          const wordCount = actual.title
+          const actualWords = actual.title
             .trim()
             .split(/\s+/)
-            .length
 
-          expect(wordCount).toBeLessThan(6)
+          expect(actualWords.length).toBeLessThanOrEqual(5)
+          expect(actual.title).toBe(expected)
         }
       }),
     120_000,
   )
+
 
 
   // PROPERTY R3: Conversation relevance
@@ -627,4 +718,8 @@ describe("/autoname: real command with controlled LLM responses", () => {
       }),
     120_000,
   )
+
+
 })
+
+
