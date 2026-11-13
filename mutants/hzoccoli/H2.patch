@@ -1,0 +1,15 @@
+diff --git a/packages/opencode/src/session/reminders.ts b/packages/opencode/src/session/reminders.ts
+index e91b83a..8897fcd 100644
+--- a/packages/opencode/src/session/reminders.ts
++++ b/packages/opencode/src/session/reminders.ts
+@@ -114,10 +114,6 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
+ const maxHintLevel = 5
+ 
+ function bumpedHintLevel(session: Session.Info, messageID: string) {
+-  if (session.metadata?.hintMessageID === messageID) {
+-    const current = session.metadata.hintLevel
+-    if (typeof current === "number" && current >= 1) return Math.min(current, maxHintLevel)
+-  }
+   const previous = session.metadata?.hintLevel
+   const level = typeof previous === "number" ? previous : 0
+   return Math.min(Math.max(level, 0) + 1, maxHintLevel)

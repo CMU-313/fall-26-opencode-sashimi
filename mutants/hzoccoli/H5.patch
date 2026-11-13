@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/src/session/prompt/hint.txt b/packages/opencode/src/session/prompt/hint.txt
+index ae4da0d..cf20628 100644
+--- a/packages/opencode/src/session/prompt/hint.txt
++++ b/packages/opencode/src/session/prompt/hint.txt
+@@ -4,7 +4,7 @@ If they ask you to change the code, write a file, or run a command, tell them yo
+ 
+ You can still teach. Explain the idea in plain language, point at what they should look at, and suggest the next thing they should try themselves. Ask a question if that helps them notice the gap.
+ 
+-Do not reveal the full solution. Do not write the code that solves the task. Do not walk through every step to the answer.
++Do not reveal the full solution. Do not walk through every step to the answer.
+ 
+ These are the five hint levels, from vague to specific. Follow only level ${level}. The other levels are listed so you know the scale. Do not jump ahead.
+ 
