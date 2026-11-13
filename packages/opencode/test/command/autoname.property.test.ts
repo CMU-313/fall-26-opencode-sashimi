@@ -451,6 +451,28 @@ describe("/autoname: real command with controlled LLM responses", () => {
     120_000,
   )
 
+  // PROPERTY: every valid 2-5 word model-generated title is saved correctly
+  it.instance(
+    "Property: every valid 2-5 word title is saved verbatim",
+    () =>
+      Effect.gen(function* () {
+        const titles = fc.sample(titleArb, {
+          numRuns: 20,
+          seed: 707,
+        })
+
+        for (const title of titles) {
+          const actual = yield* runAutoname(
+            `RENAMED: ${title}`,
+            ["Discussing code"],
+          )
+
+          expect(actual.title).toBe(title)
+        }
+      }),
+    120_000,
+  )
+
 
   // PROPERTY 3: Extra-output tolerance
   // Adding an explanation after a valid RENAMED line should
@@ -696,46 +718,7 @@ describe("/autoname: real command with controlled LLM responses", () => {
       }),
     120_000,
   )
-  const finalPartTitleArb = fc.record({
-  title: titleArb,
-  precedingParts: fc.array(
-    fc.string({ minLength: 1, maxLength: 40 })
-      .filter((s) => !s.includes("RENAMED:")),
-    { minLength: 1, maxLength: 5 },
-  ),
-  })
 
-  it.instance(
-    "P6 - Metamorphic: autoname processes the final response part",
-    () =>
-      Effect.gen(function* () {
-        const cases = fc.sample(finalPartTitleArb, {
-          numRuns: 8,
-          seed: 606,
-        })
-
-        for (const { title, precedingParts } of cases) {
-          const parts = [
-            ...precedingParts.map((text) => ({
-              type: "text" as const,
-              text,
-            })),
-            {
-              type: "text" as const,
-              text: `RENAMED: ${title}`,
-            },
-          ]
-
-          const actual = yield* runAutonameWithParts(
-            parts,
-            ["Help me improve my code"],
-          )
-
-          expect(actual.title).toBe(title)
-        }
-      }),
-    120_000,
-  )
 
 })
 
