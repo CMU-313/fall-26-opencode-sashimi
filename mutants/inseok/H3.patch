@@ -1,0 +1,9 @@
+diff --git a/packages/opencode/src/cli/cmd/run/permission.shared.ts b/packages/opencode/src/cli/cmd/run/permission.shared.ts
+--- a/packages/opencode/src/cli/cmd/run/permission.shared.ts
++++ b/packages/opencode/src/cli/cmd/run/permission.shared.ts
+@@ -80,4 +80,4 @@
+ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
+   if (stage === "permission") {
+-    return ["once", "always", "reject"]
++    return ["once", "reject", "always"]
+   }

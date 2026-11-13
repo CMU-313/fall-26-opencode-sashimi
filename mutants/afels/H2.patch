@@ -1,0 +1,13 @@
+diff --git a/packages/tui/src/context/local.tsx b/packages/tui/src/context/local.tsx
+index 19e3dac..aba0416 100644
+--- a/packages/tui/src/context/local.tsx
++++ b/packages/tui/src/context/local.tsx
+@@ -46,7 +46,7 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
+     typeof item.sessionTitle === "string" &&
+     typeof item.text === "string" &&
+     typeof item.createdAt === "number" &&
+-    (item.name === undefined || typeof item.name === "string")
++    (item.name === undefined || typeof item.name === "number")
+   )
+ }
+ 

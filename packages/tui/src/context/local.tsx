@@ -14,6 +14,8 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { Locale } from "../util/locale"
+import { errorMessage } from "../util/error"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -56,20 +58,40 @@ function isLocalBookmark(value: unknown): value is LocalBookmark {
 // means the file exists but couldn't be used, so it's backed up (renamed with
 // a `.corrupt-<timestamp>` suffix) rather than silently treated as empty and
 // overwritten on the next save, which would destroy whatever was in it.
+// If the backup itself fails, this throws instead of returning an empty list,
+// because the unusable file is still in place and a later save would
+// overwrite it (see backupUnusableFile).
 // Exported (and operating on a real filePath, not a mocked one) so the actual
 // save/load/corruption-recovery behavior can be tested against the real
 // filesystem, not just the error-classification logic underneath it.
 export async function loadBookmarks(filePath: string): Promise<LocalBookmark[]> {
+  let data: unknown
   try {
-    const data = await readJson<unknown>(filePath)
-    if (!data || typeof data !== "object") return []
-    const items = (data as Record<string, unknown>).items
-    if (!Array.isArray(items)) return []
-    return items.filter(isLocalBookmark)
+    data = await readJson<unknown>(filePath)
   } catch (error) {
     if (isMissingFileError(error)) return []
-    await rename(filePath, `${filePath}.corrupt-${Date.now()}`).catch(() => {})
+    await backupUnusableFile(filePath)
     return []
+  }
+  // Valid JSON, but not the { items: [...] } this app writes: back it up too,
+  // the same as invalid JSON (reported in code review by Inseo).
+  const items = data && typeof data === "object" ? (data as Record<string, unknown>).items : undefined
+  if (!Array.isArray(items)) {
+    await backupUnusableFile(filePath)
+    return []
+  }
+  return items.filter(isLocalBookmark)
+}
+
+// Moves a bookmark.json that exists but can't be used out of the way (renamed
+// with a `.corrupt-<timestamp>` suffix), so the next save can't overwrite it.
+// If the rename fails, the original is still there, so this throws to tell the
+// caller not to save over it, instead of silently carrying on.
+export async function backupUnusableFile(filePath: string) {
+  try {
+    await rename(filePath, `${filePath}.corrupt-${Date.now()}`)
+  } catch (error) {
+    throw new Error(`Couldn't back up unreadable ${path.basename(filePath)}: ${errorMessage(error)}`, { cause: error })
   }
 }
 
@@ -84,14 +106,18 @@ export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
 export function removeBookmark(items: LocalBookmark[], id: string) {
   return items.filter((item) => item.id !== id)
 }
-//If a bookmark with a specific id already exists it is removed, otherwise a new one is created
-//result exists so the correct message is shown depending on whether we are looking at a 
-//current bookmark or a non existing one
-export function toggleBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
-  const exists = items.some((item) => item.id === entry.id)
+// Bookmarks a response. If that response is already bookmarked, the list is
+// returned unchanged along with the existing bookmark, so the caller can tell
+// the user it's already saved instead of creating a duplicate (R4).
+// (This used to be a toggle that removed the bookmark on a second press; the
+// R4 property found that, and bookmarks are now removed from the list.)
+export function addBookmark(items: LocalBookmark[], entry: Omit<LocalBookmark, "createdAt">) {
+  const existing = items.find((item) => item.id === entry.id)
+  if (existing) return { items, result: "exists" as const, existing }
   return {
-    items: exists ? removeBookmark(items, entry.id) : [...items, { ...entry, createdAt: Date.now() }],
-    result: exists ? ("removed" as const) : ("added" as const),
+    items: [...items, { ...entry, createdAt: Date.now() }],
+    result: "added" as const,
+    existing: undefined,
   }
 }
 
@@ -112,6 +138,30 @@ export function pruneBookmarksForSession(items: LocalBookmark[], sessionID: stri
 // ordering can be tested without spinning up the full local context.
 export function sortBookmarks(items: LocalBookmark[]) {
   return items.toSorted((a, b) => b.createdAt - a.createdAt)
+}
+
+// The text a bookmark saves for a response: its visible text parts, in order,
+// joined with newlines. Synthetic parts (added by OpenCode, not written by the
+// model) and non-text parts like tool calls are left out. Pulled out of the
+// bookmark command (routes/session/index.tsx) so R1 can be property-tested.
+export function bookmarkText(parts: ReadonlyArray<{ type: string; text?: string; synthetic?: boolean }>) {
+  return parts
+    .filter((part) => part.type === "text" && !part.synthetic)
+    .map((part) => part.text ?? "")
+    .join("\n")
+    .trim()
+}
+
+// The default title of an unnamed bookmark: the start of its text, with runs
+// of whitespace collapsed to one space, cut to 80 characters.
+export function bookmarkSnippet(text: string) {
+  return Locale.truncate(text.replace(/\s+/g, " ").trim(), 80)
+}
+
+// What the bookmark list shows for a bookmark: its custom name if it has one,
+// otherwise the snippet. Shared by the list and the rename prompt.
+export function bookmarkTitle(bookmark: Pick<LocalBookmark, "name" | "text">) {
+  return bookmark.name || bookmarkSnippet(bookmark.text)
 }
 
 // Reconciles two TUI sessions writing to the same bookmark.json at once.
@@ -158,6 +208,17 @@ export function mergeBookmarks(
     }
   }
   return result
+}
+
+// The response the bookmark command saves: the most recent assistant message.
+// Pulled out of the command (routes/session/index.tsx) so which message gets
+// bookmarked can be property-tested (red team mutant A3 from slaman swapped
+// findLast for find inside the command, which no property could reach).
+// For real session messages the result is typed as the assistant message;
+// for plain objects (like the property test's) it keeps their own type.
+type AssistantOf<T> = [Extract<T, { role: "assistant" }>] extends [never] ? T : Extract<T, { role: "assistant" }>
+export function latestAssistantMessage<T extends { role: string }>(messages: readonly T[]) {
+  return messages.findLast((message) => message.role === "assistant") as AssistantOf<T> | undefined
 }
 
 export function parseModel(model: string) {
@@ -666,6 +727,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const filePath = path.join(paths.state, "bookmark.json")
       const state = {
         pending: false,
+        // Set when bookmark.json couldn't be read *or* backed up at startup.
+        // The original file is still on disk, so this session never saves
+        // over it; every save fails with this message instead.
+        blocked: undefined as string | undefined,
       }
       // The last state this session knows it shared with disk - either what
       // it loaded at startup, or the result of its own last successful save.
@@ -680,6 +745,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       // session saving around the same time doesn't silently clobber this
       // session's bookmarks (or vice versa).
       async function save() {
+        if (state.blocked) throw new Error(state.blocked)
         if (!bookmarkStore.ready) {
           state.pending = true
           return
@@ -696,6 +762,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((items) => {
           baseline = items
           setBookmarkStore("items", items)
+        })
+        .catch((error) => {
+          state.blocked = `Bookmarks can't be saved this session: ${errorMessage(error)}`
+          toast.show({ message: state.blocked, variant: "error" })
         })
         .finally(() => {
           setBookmarkStore("ready", true)
@@ -730,17 +800,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             throw error
           }
         },
-        async toggle(entry: Omit<LocalBookmark, "createdAt">) {
+        async add(entry: Omit<LocalBookmark, "createdAt">) {
           const previous = bookmarkStore.items
-          const { items, result } = toggleBookmark(bookmarkStore.items, entry)
-          setBookmarkStore("items", items)
+          const added = addBookmark(bookmarkStore.items, entry)
+          // Already bookmarked: nothing changed, so there is nothing to save.
+          if (added.result === "exists") return added
+          setBookmarkStore("items", added.items)
           try {
             await save()
           } catch (error) {
             setBookmarkStore("items", previous)
             throw error
           }
-          return result
+          return added
         },
         async rename(id: string, name: string) {
           const previous = bookmarkStore.items

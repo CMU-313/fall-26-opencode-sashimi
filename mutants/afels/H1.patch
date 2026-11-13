@@ -1,0 +1,16 @@
+diff --git a/packages/tui/src/context/local.tsx b/packages/tui/src/context/local.tsx
+index 19e3dac..54acb0a 100644
+--- a/packages/tui/src/context/local.tsx
++++ b/packages/tui/src/context/local.tsx
+@@ -83,7 +83,10 @@ export async function saveBookmarks(filePath: string, items: LocalBookmark[]) {
+ 
+ //Returns an array of bookmarks without the one removed
+ export function removeBookmark(items: LocalBookmark[], id: string) {
+-  return items.filter((item) => item.id !== id)
++  const target = items.find((item) => item.id === id)
++  if (!target) return items
++  const day = new Date(target.createdAt).toDateString()
++  return items.filter((item) => new Date(item.createdAt).toDateString() !== day)
+ }
+ // Bookmarks a response. If that response is already bookmarked, the list is
+ // returned unchanged along with the existing bookmark, so the caller can tell
