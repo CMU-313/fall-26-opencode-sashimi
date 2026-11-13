@@ -34,8 +34,11 @@ const target = fc.constantFrom(".", "/", "*", "node_modules", "src/", "~", "a.tx
 // the gaps between tokens, which is what trim() and the \s+ split absorb.
 const spacing = fc.tuple(fc.constantFrom("", " ", "  "), fc.constantFrom(" ", "  "), fc.constantFrom("", " "))
 const spaced = (tokens: string[], s: [string, string, string]) => s[0] + tokens.join(s[1]) + s[2]
+// rm can be reached through a path or a wrapper; a PR reviewer pointed out
+// that only bare "rm" and "sudo rm" were covered.
+const program = fc.constantFrom("rm", "sudo rm", "sudo -u me rm", "env rm", "command rm", "/bin/rm", "/usr/bin/rm", "FOO=1 rm")
 const dangerous = fc
-  .tuple(fc.constantFrom("rm", "sudo rm"), recursiveForce, fc.array(target, { minLength: 1, maxLength: 2 }), spacing)
+  .tuple(program, recursiveForce, fc.array(target, { minLength: 1, maxLength: 2 }), spacing)
   .map(([cmd, flags, targets, s]) => spaced([...cmd.split(" "), ...flags.split(" "), ...targets], s))
 // Harmless: rm with at most one of the two flags, plus tools that legitimately
 // take -rf (cp, chmod, rsync) and must not be downgraded just for the flags.

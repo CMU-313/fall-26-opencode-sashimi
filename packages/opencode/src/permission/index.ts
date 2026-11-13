@@ -50,9 +50,13 @@ export function decide(permission: string, pattern: string, ...rulesets: Permiss
 
 export function dangerous(command: string) {
   const tokens = command.trim().split(/\s+/)
-  const head = tokens[0] === "sudo" ? tokens[1] : tokens[0]
-  if (head !== "rm") return false
-  const flags = tokens.filter((token) => token.startsWith("-"))
+  // rm can sit behind a path (/bin/rm), a wrapper (sudo -u me, env, command),
+  // or VAR=value assignments, so look for the first token that is rm by
+  // basename and only read flags after it. Erring toward "ask" on something
+  // like "echo rm -rf ." is acceptable; missing "sudo -u me rm -rf ." is not.
+  const at = tokens.findIndex((token) => token.slice(token.lastIndexOf("/") + 1) === "rm")
+  if (at === -1) return false
+  const flags = tokens.slice(at + 1).filter((token) => token.startsWith("-"))
   const has = (long: string, short: RegExp) =>
     flags.some((flag) => flag === long || (/^-[A-Za-z]+$/.test(flag) && short.test(flag)))
   return has("--recursive", /[rR]/) && has("--force", /f/)

@@ -58,9 +58,14 @@ const tui: TuiPlugin = async (api) => {
 
   api.event.on("permission.unblocked", (event) => {
     const rule = event.properties.rule
+    // The command may now be allowed or may prompt, so say "no longer blocks"
+    // rather than "enabled". The toast covers a focused terminal, where the
+    // OS notification is skipped.
+    const message = `Permission change: "${rule.pattern}": ${rule.action} no longer blocks "${event.properties.pattern}"`
+    api.ui.toast({ variant: "warning", message })
     void api.attention.notify({
       title: api.state.session.get(event.properties.sessionID)?.title,
-      message: `Permission change enabled "${event.properties.pattern}", previously blocked by "${rule.pattern}": ${rule.action}`,
+      message,
       notification: { when: "blurred" },
       sound: false,
     })
